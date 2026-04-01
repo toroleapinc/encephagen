@@ -144,6 +144,19 @@ Both derived from Human Connectome Project diffusion MRI tractography.
 }
 ```
 
+## Related Projects
+
+- **[conntopo](https://github.com/toroleapinc/conntopo)** — Toolkit for comparing connectome dynamics against null models (Kuramoto + Wilson-Cowan). The foundation this project builds on.
+- **[cortexlet](https://github.com/toroleapinc/cortexlet)** — Brain-topology-structured trainable neural network for ML tasks.
+
+## Contributing
+
+This is an open-source research project. Contributions welcome — especially:
+- Testing with different parcellations (Schaefer 200, Glasser 360)
+- Adding dynamics models (Hopf, Jansen-Rit)
+- Conduction delay incorporation
+- Replication on other connectome datasets
+
 ## License
 
 MIT
