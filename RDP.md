@@ -1,504 +1,579 @@
-# Research Design Proposal: Encephagen
+# Encephagen: Research Design Proposal v2
 
 ## 1. Title & Abstract
 
-**Formal Title:** Encephagen: Emergent Brain-Like Dynamics from Human Macro-Connectome Topology Simulated as a Living Dynamical System
+**Title:** Encephagen — Building a Miniature Human Brain from Connectome Topology
 
-### Abstract
+**Abstract:**
 
-The human brain's remarkable capabilities emerge not from any single neuron but from the specific topology of connections between regions. While connectome-scale simulations exist for small organisms (C. elegans, Drosophila), no project has taken the human brain's macro-connectome --- the wiring diagram between cortical and subcortical regions --- instantiated it as a biophysical dynamical system, and simply observed what emerges. Encephagen does exactly this. Using structural connectivity data from the Human Connectome Project (HCP), we construct a network of 76 brain regions (expandable to 360 via the Glasser parcellation), each governed by Wilson-Cowan excitatory-inhibitory dynamics with region-type-specific parameters (cortical oscillators, thalamic burst/tonic gates, hippocampal theta generators). The simulation runs in continuous time with no backpropagation, no loss function, and no training. We hypothesize that the topology alone --- the specific pattern of long-range and short-range connections unique to the human brain --- will produce spontaneous oscillations, stimulus-selective responses, and functional differentiation that qualitatively resemble real brain dynamics. Subsequent phases introduce Hebbian and spike-timing-dependent plasticity (STDP) to test whether the system can learn from experience, and ultimately embodiment via physics simulation to test sensorimotor learning. This project aims to demonstrate that meaningful brain-like behavior can emerge from structure alone, without machine learning.
+Encephagen is an open-source project to build a functioning miniature human brain simulation. Starting from real structural connectivity data (Human Connectome Project), we incrementally build from the current 96-oscillator model toward a spiking neural network with learning, sensory input, motor output, and eventually a virtual body — following the same approach that produced behavior from the C. elegans (OpenWorm) and Drosophila (FlyWire) connectomes.
 
----
+Phase 1 (complete) demonstrated that the 96-region macro-connectome with identical Wilson-Cowan parameters produces emergent functional differentiation: a silencing hierarchy, degree-driven functional roles, and wiring-specific connectivity patterns. These findings extend Gollo et al. (2015) and Zamora-Lopez & Gilson (2025).
 
-## 2. Research Questions
-
-### Primary Question
-
-Can a miniature simulation using real human brain macro-connectome topology produce emergent brain-like dynamics and behavior without any training?
-
-Specifically:
-- Do spontaneous oscillations in biologically plausible frequency bands (delta, theta, alpha, beta, gamma) emerge from the network topology and Wilson-Cowan dynamics alone?
-- Does sensory stimulation applied to appropriate input regions produce activity patterns that preferentially activate the correct downstream regions (e.g., visual input activating occipital cortex)?
-- Does the real human connectome topology produce qualitatively different dynamics than a random network with matched degree distribution?
-
-### Secondary Questions
-
-1. **Structural variation:** Do connectome variations across age (neonatal vs. adult) and sex produce measurably different emergent behaviors? Can we observe signatures of developmental maturation in simulation?
-2. **Learning from structure:** Can biologically plausible learning rules (Hebbian, STDP, reward-modulated plasticity) layered onto the connectome topology enable the system to learn from repeated experience --- distinguishing patterns, forming associations, and adapting behavior?
-3. **Embodiment:** Can a learned connectome-based controller drive meaningful sensorimotor behavior in a virtual body, bootstrapping from structure rather than reinforcement learning from scratch?
+The remaining phases scale to individual spiking neurons (~100K), add biologically plausible learning (Hebbian/STDP), connect real sensory input and motor output, and ultimately embed the brain in a virtual body.
 
 ---
 
-## 3. Background & Motivation
+## 2. Current Status (Phase 1 Complete)
 
-### 3.1 The Connectome Revolution
+### What exists
+- 96-region Wilson-Cowan simulation on TVB96 connectome (cortical + subcortical)
+- 5 null model comparisons (degree-preserving, ER, geometric, lattice, weight-shuffled)
+- 4 completed experiments with statistical results
+- Key finding: two-level decomposition (degree → hierarchy, wiring → FC patterns)
+- 10 passing tests, 3 publication-quality figures
+- GitHub: https://github.com/toroleapinc/encephagen
 
-The past decade has seen transformative advances in mapping neural connectivity at multiple scales:
-
-- **C. elegans** (302 neurons): The complete wiring diagram has been known since the 1980s (White et al., 1986). The OpenWorm project simulated the full connectome as a dynamical system and demonstrated emergent locomotion behavior, proving that structure can drive function without training.
-- **Drosophila melanogaster** (~140,000 neurons): Lappalainen et al. (2024, Nature) published the first complete whole-brain connectome of an adult fruit fly, enabling unprecedented analysis of circuit motifs and information flow architecture.
-- **Human macro-connectome** (76--360 regions): The Human Connectome Project (HCP; Van Essen et al., 2013) provides diffusion MRI-derived structural connectivity matrices for hundreds of subjects, parcellated using the Glasser et al. (2016) multi-modal atlas into 360 cortical regions. The developing Human Connectome Project (dHCP; Bastiani et al., 2019) extends this to neonatal brains.
-
-### 3.2 Large-Scale Brain Simulation
-
-- **The Blue Brain Project / EBRAINS** (Markram et al., 2015): Simulated a cortical column of ~31,000 neurons with biophysically detailed compartmental models. Demonstrated that detailed biophysics can produce emergent oscillatory dynamics, but required supercomputer-scale resources and focused on a single cortical column rather than whole-brain topology.
-- **The Virtual Brain (TVB)** (Sanz-Leon et al., 2013): Simulates whole-brain dynamics using neural mass models coupled by connectome data. Closest to our approach, but designed for fitting clinical neuroimaging data (EEG/fMRI), not for observing emergent behavior from a "blank" brain or testing learning.
-
-### 3.3 Theoretical Foundations
-
-- **Buzsaki's "Inside Out"** (2019): Argues that the brain is not a passive stimulus-response machine but an active, self-organizing system whose internal dynamics are primary. Brain rhythms and sequences exist before sensory experience. This directly supports our hypothesis that connectome topology alone should produce rich spontaneous dynamics.
-- **Friston's Free Energy Principle** (2010): Proposes that biological systems minimize surprise (free energy) through prediction and action. While we do not implement the full Free Energy framework, our learning phases (Hebbian/STDP) implement a simplified version: the network's synaptic weights will self-organize to predict and respond to regularities in its inputs.
-- **Sporns' "Networks of the Brain"** (2010): Established that brain network topology --- small-world architecture, rich-club organization, modular structure --- is not arbitrary but optimized for efficient information integration. This motivates our core hypothesis that topology matters.
-
-### 3.4 The Gap
-
-Despite these advances, **no project has**:
-
-1. Taken the human macro-connectome as a starting point
-2. Instantiated each region with biophysically motivated dynamics (not just linear coupling)
-3. Treated the system as a "newborn brain" with no prior training
-4. Systematically observed what emergent dynamics and behaviors arise from structure alone
-5. Then layered biologically plausible learning to test whether the system can learn like a developing brain
-
-### 3.5 Why Human (Not Fly or Worm)?
-
-While C. elegans and Drosophila connectomes offer completeness at the neuron level, the human brain has unique structural features that may produce qualitatively different dynamics:
-
-- **Enlarged prefrontal cortex**: Massive expansion of PFC relative to other primates, with dense long-range connections to virtually all other cortical and subcortical regions
-- **Long-range cortico-cortical connections**: The human brain has uniquely developed association fiber bundles (arcuate fasciculus, superior longitudinal fasciculus) connecting distant cortical regions
-- **Cortical layer proportions**: Human cortex has expanded supragranular layers (II/III), associated with cortico-cortical communication and abstract processing
-- **Rich-club topology**: Human brain networks show pronounced rich-club organization --- a densely interconnected core of hub regions that may serve as an integration backbone
-
-We hypothesize that these features will produce richer spontaneous dynamics, more complex stimulus responses, and greater learning capacity than would be seen with simpler organism topologies.
+### What doesn't exist yet
+- Individual neurons (currently 1 oscillator per region)
+- Learning of any kind
+- Sensory input beyond mathematical pulses
+- Motor output
+- A body
+- Anything that "behaves"
 
 ---
 
-## 4. Methodology
+## 3. Milestone Roadmap
 
-### 4.1 Connectome Data Sources
+### Milestone 1: Spiking Neural Network (Months 1-2)
 
-| Source | Resolution | Subjects | Use Case |
-|--------|-----------|----------|----------|
-| HCP (Human Connectome Project) | 76 regions (Desikan-Killiany) | 1,000+ adults | Initial prototype, fast iteration |
-| HCP + Glasser Atlas | 360 cortical regions + subcortical | 1,000+ adults | Full-resolution simulation |
-| dHCP (developing HCP) | 76--90 regions | Neonatal (37--44 weeks) | Neonatal brain simulation |
-| Demographic subsets | Matched resolution | Age/sex stratified | Variation experiments |
+**Goal:** Replace 96 Wilson-Cowan oscillators with ~96,000 spiking neurons (1,000 per region), preserving the connectome topology as between-region connectivity.
 
-**Connectivity matrix format:** Weighted, undirected structural connectivity matrices derived from diffusion MRI tractography. Edge weights represent streamline counts normalized by region volume (connection density). Matrices will be thresholded to remove spurious connections (retaining top 20--30% of connections by weight) and log-transformed to compress the heavy-tailed weight distribution.
+**Why this is needed:** You cannot encode information, learn, or produce behavior with 1 number per brain region. Individual neurons that fire spikes are the minimum computational unit for all subsequent milestones.
 
-### 4.2 Region Dynamics: Wilson-Cowan Model
-
-Each brain region is modeled as a Wilson-Cowan excitatory-inhibitory (E-I) coupled oscillator:
+#### Architecture
 
 ```
-tau_E * dE/dt = -E + S(w_EE*E - w_EI*I + P + sum_j(C_ij * E_j) + I_ext)
-tau_I * dI/dt = -I + S(w_IE*E - w_II*I + Q)
+Current:
+  Region_i = one Wilson-Cowan oscillator (2 variables: E, I)
+  
+Target:
+  Region_i = population of 1,000 LIF neurons
+    - 800 excitatory (80% — matches biology)
+    - 200 inhibitory (20% — matches biology)
+    - Within-region: random connectivity, ~10% connection probability
+    - Between-region: follows TVB96 connectome weights
+      (e.g., if connectome weight BG→PFC = 0.5,
+       then 0.5 * max_synapses excitatory neurons in BG
+       project to random neurons in PFC)
 ```
 
-Where:
-- `E`, `I`: Excitatory and inhibitory population activities for a given region
-- `w_EE, w_EI, w_IE, w_II`: Local coupling weights (region-type specific)
-- `P, Q`: Baseline drives
-- `C_ij`: Structural connectivity weight from region j to region i (from connectome)
-- `I_ext`: External stimulus input
-- `S(x)`: Sigmoidal activation function: `S(x) = 1 / (1 + exp(-a*(x - theta))) - 1 / (1 + exp(a*theta))`
-- `tau_E, tau_I`: Time constants (excitatory ~10ms, inhibitory ~20ms)
+#### Neuron Model: Leaky Integrate-and-Fire (LIF)
 
-### 4.3 Specialized Region Types
-
-Not all brain regions behave identically. We define three region archetypes with distinct parameter sets:
-
-**Cortical regions** (default):
-- Standard Wilson-Cowan E-I oscillator
-- Parameters tuned to produce alpha-band (~10 Hz) oscillations at rest
-- Includes all Glasser parcellation cortical regions
-
-**Thalamic regions** (thalamus, LGN, MGN, pulvinar):
-- Modified dynamics with tonic and burst firing modes
-- Low-threshold calcium current approximation enabling state-dependent gating
-- Acts as a relay/gate for sensory input and cortico-cortical communication
-- Parameters: lower excitatory time constant, higher burst threshold
-
-**Hippocampal regions** (hippocampus, entorhinal cortex, subiculum):
-- Theta-frequency oscillator (~4--8 Hz)
-- Activity-dependent trace variable for memory formation (used in learning phases)
-- Slower inhibitory time constant to support theta rhythm
-- Parameters: tau_I ~50ms, stronger recurrent excitation
-
-### 4.4 Simulation Architecture
-
-- **Integration method:** 4th-order Runge-Kutta (RK4) with adaptive timestep (dt = 0.1--1.0 ms)
-- **Backend:** NumPy for prototyping; CuPy/JAX for GPU acceleration on RTX 5070
-- **No backpropagation:** All dynamics are forward-simulated. No loss functions, no gradient computation.
-- **State representation:** Each region stores (E, I, trace) = 3 floats. For 360 regions: 1,080 state variables total --- trivially fits in GPU memory.
-- **Connectivity:** Sparse matrix multiplication for inter-region coupling. For 360 regions with ~30% density: ~39,000 non-zero connections.
-- **Output recording:** E and I activity for all regions sampled at 1 kHz (1,000 Hz), stored as time-series for offline analysis.
-
-### 4.5 Stimulus Protocol
-
-Stimuli are delivered as external current `I_ext` to designated input regions:
-
-| Modality | Target Regions | Stimulus Types |
-|----------|---------------|----------------|
-| Visual | V1, V2, V4 (occipital) | Flashing (step function), edges (graded activation across retinotopic regions), patterns |
-| Auditory | A1, A2 (temporal) | Pure tones (sinusoidal), tone sequences, frequency sweeps |
-| Somatosensory | S1, S2 (parietal) | Touch pulses, sustained pressure, moving stimuli |
-
-Stimulus intensities are parameterized as multiples of the spontaneous activity baseline (1x, 2x, 5x threshold).
-
-### 4.6 Learning Rules (Phase 7)
-
-**Hebbian learning:**
 ```
-dW_ij/dt = eta * E_i * E_j - lambda * W_ij
-```
-Connection weights between co-active regions strengthen; a decay term prevents runaway excitation.
+τ_m * dV/dt = -(V - V_rest) + R * I_syn + I_ext
+if V > V_threshold: spike, V = V_reset, refractory for t_ref
 
-**Spike-Timing-Dependent Plasticity (STDP):**
-```
-dW_ij = A+ * exp(-dt/tau+)  if pre before post (LTP)
-dW_ij = A- * exp(dt/tau-)   if post before pre (LTD)
-```
-Adapted for rate-coded populations using activity traces as spike-time proxies.
+Parameters (identical for all excitatory neurons):
+  τ_m = 20 ms         (membrane time constant)
+  V_rest = -65 mV     (resting potential)
+  V_threshold = -50 mV (spike threshold)
+  V_reset = -70 mV    (reset after spike)
+  t_ref = 2 ms        (refractory period)
+  R = 100 MΩ          (membrane resistance)
 
-**Reward modulation:**
+Inhibitory neurons: same but τ_m = 10 ms (faster)
 ```
-dW_ij/dt = eta * E_i * E_j * R(t)
+
+#### Implementation Options
+
+| Option | Pros | Cons | Recommendation |
+|---|---|---|---|
+| **Brian2** | Mature, well-documented, equation-based, large community | Python-only, can be slow for >100K neurons | Good for prototyping |
+| **Norse** (PyTorch spiking) | GPU-accelerated, integrates with PyTorch, enables gradient-based analysis | Less biophysically detailed | Good for scale |
+| **NEST** | Highly optimized, scales to millions, used by HBP | Complex setup, C++ backend | Overkill for 100K |
+| **Custom NumPy/PyTorch** | Full control, no dependencies | Must implement everything | Fastest iteration |
+
+**Recommendation:** Start with custom NumPy for prototype (simple, fast iteration). Migrate to Norse if GPU acceleration is needed.
+
+#### Testing Plan
+
 ```
-Where R(t) is a global reward signal, enabling reinforcement-like learning without backpropagation.
+Test 1.1: Smoke test
+  - 96K neurons initialize without error
+  - Simulation runs for 1 second without NaN or overflow
+  - Memory usage < 8 GB (fits RTX 5070)
+  
+Test 1.2: Single region dynamics
+  - 1,000 LIF neurons with 10% internal connectivity
+  - Inject constant current → should produce irregular firing at ~5-20 Hz
+  - Verify: firing rates, coefficient of variation of ISI > 0.5 (irregular)
+  
+Test 1.3: Hierarchy preservation
+  - Run full 96K neuron simulation on real connectome
+  - Compute mean firing rate per region
+  - Compare to Wilson-Cowan findings:
+    Does BG still fire most? Does the silencing order persist?
+  - If YES → spiking model preserves macro-level findings
+  - If NO → investigate why (may need parameter tuning)
 
-### 4.7 Embodiment (Phase 8, Future)
+Test 1.4: Real vs random comparison
+  - Same test on degree-preserving rewired connectome
+  - Does the two-level decomposition still hold?
 
-Integration with MuJoCo or NVIDIA Isaac Gym to provide a virtual body:
-- Motor output regions (M1, premotor, SMA) drive joint torques
-- Sensory regions receive proprioceptive and exteroceptive feedback
-- Closed-loop sensorimotor interaction enables grounded learning
+Test 1.5: Performance benchmark
+  - Measure: simulation seconds per wall-clock second
+  - Target: at least 1 second of simulation in < 60 seconds wall-clock
+  - Profile memory usage, identify bottlenecks
+```
+
+#### Required Expertise
+- **SDE:** Efficient sparse matrix operations for synaptic connectivity, memory management for 96K neurons × 1K synapses
+- **Computational neuroscience:** LIF parameter selection, synaptic weight scaling, E/I balance tuning
+- **Latest research:** Check Billeh et al. (2020, Allen Institute) for their 230K neuron V1 model parameters as reference
+
+#### Deliverables
+- `src/encephagen/neurons/lif.py` — LIF neuron model
+- `src/encephagen/neurons/population.py` — Region as a neuron population
+- `src/encephagen/network/spiking_brain.py` — Full brain with spiking populations
+- Updated tests validating hierarchy preservation
+- Performance benchmark results
 
 ---
 
-## 5. Experiments
+### Milestone 2: Learning (Month 2-3)
 
-### Experiment 1: Spontaneous Dynamics (No Input)
+**Goal:** Connections between neurons change based on activity. The brain can learn from experience.
 
-**Question:** Does the connectome topology, coupled with Wilson-Cowan dynamics, produce spontaneous oscillatory activity in biologically plausible frequency bands?
+**Why this is needed:** Without learning, the brain is a fixed circuit that always responds the same way. With learning, it can adapt, recognize, and remember.
 
-**Protocol:**
-1. Initialize all regions at low random activity (E ~ 0.1, I ~ 0.05)
-2. Run simulation for 60 seconds (simulated time) with no external input
-3. Record all region activities at 1 kHz
+#### Learning Rules
 
-**Analysis:**
-- Power spectral density (PSD) of each region's E activity
-- Cross-correlation and coherence between region pairs
-- Phase-amplitude coupling analysis
-- Comparison with resting-state fMRI/EEG power spectra from literature
+**Rule 1: Spike-Timing Dependent Plasticity (STDP)**
+```
+If pre fires BEFORE post (within 20ms): strengthen connection (LTP)
+  Δw = A+ * exp(-Δt / τ+)    where A+ = 0.01, τ+ = 20ms
 
-**Success criteria:** Emergence of peaks in the alpha (8--12 Hz) and/or theta (4--8 Hz) bands that are not present in the single-region dynamics alone (i.e., topology-dependent).
+If pre fires AFTER post (within 20ms): weaken connection (LTD)  
+  Δw = -A- * exp(Δt / τ-)    where A- = 0.012, τ- = 20ms
 
-**Falsification:** If the network produces only flat-spectrum noise or uniform fixed-point activity regardless of parameter tuning, the macro-connectome resolution may be insufficient.
+Only modify EXCITATORY synapses (Dale's law)
+```
 
-### Experiment 2: Stimulus Response
+**Rule 2: Homeostatic Plasticity**
+```
+Each neuron has a target firing rate (e.g., 5 Hz).
+If firing too fast: scale down all incoming weights by 1%
+If firing too slow: scale up all incoming weights by 1%
+Adjustment every 1 second of simulation time.
 
-**Question:** Does sensory stimulation of appropriate input regions produce activity that preferentially propagates to the correct downstream regions?
+This prevents runaway excitation or complete silence.
+```
 
-**Protocol:**
-1. Apply visual stimulus (step function, 500ms duration) to V1/V2 regions
-2. Record propagation of activity across all regions
-3. Repeat with auditory stimulus to A1/A2
-4. Repeat with somatosensory stimulus to S1/S2
+**Rule 3: Reward Modulation (Future — Milestone 4)**
+```
+A global "dopamine" signal that modulates STDP:
+  - When reward arrives: recent STDP changes are amplified
+  - When no reward: recent changes decay
+  
+This enables reinforcement learning at the synaptic level.
+Not needed until the brain has a body (Milestone 4+).
+```
 
-**Analysis:**
-- Latency maps: time-to-peak activation for each region after stimulus onset
-- Activation magnitude maps: which regions show strongest response?
-- Modality selectivity: does visual input preferentially activate the ventral/dorsal visual streams? Does auditory input preferentially activate temporal regions?
+#### Testing Plan
 
-**Success criteria:** Stimulus-evoked activity patterns that are modality-specific and consistent with known functional anatomy (e.g., visual input activates occipital > temporal > frontal, not random spread).
+```
+Test 2.1: STDP basic validation
+  - Two neurons, pre always fires 5ms before post
+  - After 100 pairings, the connection weight should increase
+  - Reverse timing → weight should decrease
+  
+Test 2.2: Homeostatic stability
+  - Run full network for 60 seconds with STDP enabled
+  - Mean firing rates should remain in 1-20 Hz range
+  - No region should explode (>100 Hz) or die (<0.1 Hz)
 
-**Falsification:** If all three stimulus modalities produce identical activation patterns, the topology does not meaningfully constrain information flow.
+Test 2.3: Familiarity effect
+  - Present stimulus pattern A 50 times, pattern B 0 times
+  - Then present both A and B once each
+  - Measure response latency and magnitude
+  - Pattern A should produce faster/stronger response
+  
+Test 2.4: Pattern separation
+  - Present two similar but distinct patterns (A, A') repeatedly
+  - After learning, the network's response to A and A' should 
+    be MORE different than before learning
+  - This tests hippocampal-like pattern separation
 
-### Experiment 3: Real vs. Random Wiring
+Test 2.5: Weight stability
+  - After 60 seconds of STDP + homeostasis, stop learning
+  - Measure total synaptic weight distribution
+  - Should be log-normal (biological observation, Song et al. 2005)
+```
 
-**Question:** Does the specific topology of the human connectome matter, or would any network with similar statistical properties produce the same dynamics?
+#### Required Expertise
+- **Computational neuroscience:** STDP parameter tuning, homeostatic plasticity implementation, biological plausibility validation
+- **Latest research:** Check Zenke & Ganguli (2018) "SuperSpike" for modern bioplausible learning rules; Bellec et al. (2020) for e-prop
+- **SDE:** Efficient online weight updates for ~100M synapses
 
-**Protocol:**
-1. Generate null-model networks: (a) Erdos-Renyi random graph with matched density, (b) degree-preserving randomization, (c) weight-preserving randomization
-2. Run Experiments 1 and 2 on each null model
-3. Compare dynamics between real connectome and null models
-
-**Analysis:**
-- Compare oscillatory power spectra
-- Compare stimulus response selectivity
-- Compare network-level measures (synchrony, metastability, functional connectivity structure)
-- Statistical comparison using permutation testing (N=100 null networks)
-
-**Success criteria:** Real connectome produces significantly different (and more brain-like) dynamics than all null models.
-
-**Falsification:** If null models produce equivalent dynamics, macro-connectome topology does not carry meaningful information at this scale.
-
-### Experiment 4: Structural Variations
-
-**Question:** Do connectome differences across developmental stage and sex produce different emergent dynamics?
-
-**Protocol:**
-1. **Neonatal vs. adult:** Compare dHCP neonatal connectome vs. HCP adult connectome
-2. **Male vs. female:** Compare sex-stratified HCP connectomes (matched for age)
-3. Run Experiments 1--3 on each variant
-
-**Analysis:**
-- Compare spontaneous oscillatory frequencies (hypothesis: neonatal shows slower dominant frequencies)
-- Compare stimulus response latencies (hypothesis: neonatal shows slower, more diffuse responses due to less-developed myelination reflected in weaker long-range connections)
-- Compare functional connectivity patterns
-
-**Success criteria:** Observable, statistically significant differences in emergent dynamics that parallel known developmental and sex differences in human neuroimaging literature.
-
-### Experiment 5: Hebbian Learning
-
-**Question:** Can Hebbian plasticity layered onto the connectome enable the system to learn from repeated stimulus exposure?
-
-**Protocol:**
-1. Enable Hebbian learning rule on inter-region connections
-2. Present stimulus A repeatedly (100 trials), then stimulus B (100 trials)
-3. Test: does the network respond differently to A vs. B after training?
-4. Test: does the network show faster/stronger response to A (familiar) vs. C (novel)?
-
-**Analysis:**
-- Response amplitude and latency before vs. after training
-- Weight change maps: which connections strengthened/weakened?
-- Habituation and novelty detection metrics
-
-**Success criteria:** Network shows measurable learning effects: faster response to familiar stimuli, distinct representations for different stimuli, without any gradient-based training.
-
-### Experiment 6: Simple Number Learning and MNIST
-
-**Question:** Can the connectome-based system learn a concrete cognitive task --- recognizing handwritten digits?
-
-**Protocol:**
-1. **Phase A:** Encode digits 0--9 as spatial patterns across visual input regions (simplified: 7-segment display mapped to V1 subregions)
-2. Train with Hebbian/STDP learning: present each digit 1,000 times with label signal to association cortex
-3. Test: present digit without label, read out from association regions
-4. **Phase B:** Encode MNIST images as graded activation patterns across V1/V2 (28x28 pixels mapped to ~50 visual regions via spatial averaging)
-5. Train and test classification accuracy
-
-**Analysis:**
-- Classification accuracy (chance = 10%)
-- Confusion matrix: which digits are confused?
-- Comparison with: (a) random network baseline, (b) simple feedforward network with same number of parameters
-
-**Success criteria:** Above-chance classification (>30% would be remarkable; >50% would be extraordinary). This is NOT expected to compete with deep learning --- the goal is to demonstrate that structure + simple learning rules can produce non-trivial cognitive behavior.
-
-### Experiment 7: Embodiment
-
-**Question:** Can the connectome-based controller learn to control a virtual body through sensorimotor interaction?
-
-**Protocol:**
-1. Connect motor output regions to a simple virtual agent (MuJoCo ant or humanoid)
-2. Feed proprioceptive/sensory signals back to somatosensory input regions
-3. Enable reward-modulated learning: reward for forward movement
-4. Run for 10,000+ simulation steps
-
-**Analysis:**
-- Distance traveled over time (learning curve)
-- Motor pattern analysis: does coordinated locomotion emerge?
-- Comparison with random controller baseline
-
-**Success criteria:** Any measurable improvement over random motor output after learning. Coordinated locomotion would be a major result.
+#### Deliverables
+- `src/encephagen/learning/stdp.py` — STDP rule
+- `src/encephagen/learning/homeostatic.py` — Homeostatic plasticity
+- `src/encephagen/learning/reward.py` — Reward modulation (placeholder until Milestone 4)
+- Tests for all learning rules
+- Demonstration: familiarity effect after repeated exposure
 
 ---
 
-## 6. Expected Outcomes
+### Milestone 3: Sensory Input (Month 3)
 
-### What We Expect to See
+**Goal:** Feed real-world signals (images, sounds) into the brain's sensory regions as spike trains.
 
-1. **Spontaneous oscillations** (Exp 1): Wilson-Cowan dynamics coupled by realistic topology should produce oscillatory activity. We expect alpha-band oscillations in cortical regions and theta-band in hippocampal regions, with the specific frequency and spatial distribution shaped by the connectome topology.
+**Why this is needed:** The brain must perceive something real. Mathematical pulses don't test whether the network can process structured information.
 
-2. **Topology-dependent stimulus routing** (Exp 2): The connectome's hierarchical organization (primary sensory -> association -> prefrontal) should naturally route stimulus-evoked activity along known functional pathways. Activity should not spread uniformly.
+#### Sensory Encoding
 
-3. **Real > Random** (Exp 3): The real connectome should produce more structured dynamics (higher metastability, richer spectral content, more modality-selective responses) than degree-matched random networks. This is our strongest prediction, supported by graph-theoretic analyses showing that brain topology is non-random.
+**Visual Input → V1/V2 Regions**
+```
+Input: grayscale image (e.g., 28x28 MNIST digit)
+Encoding: rate coding
+  - Each pixel maps to a group of neurons in V1
+  - Pixel brightness → firing rate (0=silence, 255=max rate)
+  - 28x28 = 784 pixel groups, ~1 neuron per pixel
+  - Total: 784 neurons in V1 receive visual input
+  
+Why rate coding: simplest encoding that preserves information.
+Future: add temporal coding, ON/OFF channels, Gabor-like filtering.
+```
 
-4. **Developmental signatures** (Exp 4): Neonatal connectomes should show slower, more diffuse dynamics reflecting less-developed long-range connectivity. This parallels known EEG developmental trajectories.
+**Auditory Input → A1/A2 Regions**
+```
+Input: audio waveform
+Encoding: frequency-to-place (like the cochlea)
+  - Apply FFT to 25ms windows
+  - Each frequency band maps to a group of neurons in A1
+  - Amplitude → firing rate
+  - 64 frequency bands, ~5 neurons per band
+  - Total: 320 neurons in A1 receive auditory input
+```
 
-5. **Hebbian learning works** (Exp 5): Simple learning should produce measurable changes --- but we expect it to be noisy and require careful parameter tuning. The topology should provide a useful inductive bias (prior structure) that makes learning easier than in a random network.
+**Proprioceptive Input → S1 Region (for Milestone 5+)**
+```
+Input: joint angles, contact forces from virtual body
+Encoding: rate coding
+  - Each joint angle → group of neurons in S1
+  - Angle value → firing rate
+```
 
-6. **Modest MNIST performance** (Exp 6): We expect above-chance but not impressive accuracy. The real value is demonstrating that a biologically structured system with no backpropagation can learn a standardized task at all.
+#### Testing Plan
 
-7. **Rudimentary motor control** (Exp 7): Highly speculative. We expect noisy, uncoordinated movement that slowly improves. Any directed locomotion would be a major finding.
+```
+Test 3.1: Visual encoding fidelity
+  - Encode a digit image as spike trains
+  - Decode the spike trains back to an image (using firing rates)
+  - SSIM between original and decoded > 0.8
 
-### What Would Falsify the Hypothesis
+Test 3.2: Visual stimulus propagates
+  - Inject MNIST digit into V1 neurons
+  - Record activity in all regions for 500ms
+  - V1 and V2 should show highest response
+  - Activity should propagate to temporal/prefrontal regions
 
-- **No oscillations from topology** (Exp 1): If the network produces only noise or fixed-point activity across all reasonable parameter regimes, the macro-connectome resolution is insufficient for meaningful dynamics. Mitigation: try finer parcellation (360 regions), add conduction delays.
-- **No modality selectivity** (Exp 2): If visual and auditory stimuli produce identical activation patterns, the topology does not constrain information flow at this scale. This would be a significant negative result.
-- **Real = Random** (Exp 3): If null models produce equivalent dynamics, the specific topology carries no dynamically relevant information at the macro scale. This would challenge a core assumption of computational connectomics.
+Test 3.3: Different stimuli produce different responses
+  - Inject digit "1" and digit "7" separately
+  - Record population vectors in higher regions
+  - Cosine similarity between "1" and "7" responses < 0.9
+  - (They should be distinguishable)
 
----
+Test 3.4: Auditory encoding
+  - Encode a 440 Hz tone as spike trains
+  - A1 neurons at the 440 Hz band should fire; others should not
+  
+Test 3.5: Cross-modal specificity
+  - Visual input should primarily activate V1/V2, not A1
+  - Auditory input should primarily activate A1/A2, not V1
+  - (Tests that sensory segregation is maintained by topology)
+```
 
-## 7. Timeline
+#### Required Expertise
+- **Signal processing:** Spike train encoding (rate coding, temporal coding), FFT for auditory, image preprocessing
+- **Computational neuroscience:** Biologically plausible sensory encoding, ON/OFF channels, receptive fields
+- **Latest research:** Check Gutig & Sompolinsky (2006) for temporal coding; Brette (2015) for encoding philosophy
 
-### Month 1: Foundation
-- **Week 1--2:** Data pipeline --- download and preprocess HCP connectome data, build connectivity matrix loader, visualize network topology
-- **Week 3--4:** Core simulation engine --- implement Wilson-Cowan dynamics, RK4 integrator, GPU acceleration with CuPy/JAX
-
-### Month 2: Spontaneous Dynamics
-- **Week 5--6:** Run Experiment 1 (spontaneous dynamics), parameter sweep for Wilson-Cowan parameters, identify oscillatory regimes
-- **Week 7--8:** Run Experiment 3 (real vs. random), implement null network generators, statistical comparison framework
-
-### Month 3: Stimulus Response
-- **Week 9--10:** Implement stimulus delivery system, run Experiment 2 (stimulus response), analyze modality selectivity
-- **Week 11--12:** Run Experiment 4 (structural variations), download and preprocess dHCP data, comparative analysis
-
-### Month 4: Visualization & Analysis
-- **Week 13--14:** Build real-time visualization dashboard (brain activity heatmap, oscillation traces, connectivity graph)
-- **Week 15--16:** Write up results from Experiments 1--4, prepare first preprint/blog post
-
-### Month 5: Learning
-- **Week 17--18:** Implement Hebbian and STDP learning rules, run Experiment 5 (Hebbian learning)
-- **Week 19--20:** Run Experiment 6 (MNIST), analyze and compare performance
-
-### Month 6: Integration & Publication
-- **Week 21--22:** Run Experiment 7 (embodiment, if feasible) or expand learning experiments
-- **Week 23--24:** Final analysis, write full paper, prepare for submission, release open-source code and interactive demo
-
----
-
-## 8. Hardware Requirements
-
-### Primary Development Machine
-- **GPU:** NVIDIA RTX 5070 (12GB VRAM)
-  - Sufficient for: 360-region simulation with full connectivity (state vector ~4KB, connectivity matrix ~500KB) --- trivially fits in VRAM
-  - CuPy/JAX kernel launch overhead is the bottleneck, not memory
-  - Estimated performance: 1 second of simulated brain time in ~1--5 seconds wall-clock time (at dt=0.1ms)
-- **CPU:** Modern multi-core (for data preprocessing, analysis, visualization)
-- **RAM:** 16GB system memory
-  - Sufficient for: HCP data loading (~2GB per subject), analysis pipelines, visualization
-  - Multiple subjects loaded simultaneously may require memory management
-
-### Scaling Considerations
-- **76-region simulation:** Runs comfortably on CPU alone. GPU provides ~10x speedup.
-- **360-region simulation:** GPU recommended. ~20x more connections than 76-region.
-- **Batch runs (null models, parameter sweeps):** GPU essential. 100 null models x 60s simulation each = ~100 GPU-hours at worst case.
-- **Embodiment (Phase 8):** MuJoCo runs on CPU; Isaac Gym requires GPU. May need to time-share GPU between brain simulation and physics.
-
-### Software Stack
-- Python 3.11+
-- NumPy, SciPy (core numerics)
-- CuPy or JAX (GPU acceleration)
-- Matplotlib, Plotly (visualization)
-- NetworkX, graph-tool (network analysis)
-- MuJoCo / Isaac Gym (embodiment, Phase 8)
-- Jupyter (interactive exploration)
-
----
-
-## 9. Risks & Mitigations
-
-### Risk 1: Macro-Connectome Resolution Insufficient
-**Severity:** High | **Probability:** Medium
-
-**Risk:** The 76--360 region parcellation may be too coarse to produce meaningful dynamics. Real brain function depends on micro-circuit motifs within regions, not just macro-connectivity.
-
-**Mitigation:**
-- Start with 76 regions for fast iteration; scale to 360 if promising
-- Add within-region structure (e.g., laminar sub-populations per region) if macro-level results are flat
-- Use conduction delays proportional to fiber tract length (available from HCP) to add temporal structure
-- Compare with TVB (The Virtual Brain) literature which shows that macro-scale models CAN produce meaningful dynamics
-
-### Risk 2: Wilson-Cowan Dynamics Produce Only Noise
-**Severity:** High | **Probability:** Medium
-
-**Risk:** Without careful parameter tuning, coupled Wilson-Cowan oscillators can easily fall into fixed-point attractors (boring) or chaotic noise (uninterpretable).
-
-**Mitigation:**
-- Extensive parameter sweep in Month 2 to map the bifurcation landscape
-- Use known Wilson-Cowan parameter regimes from literature (Deco et al., 2009; Breakspear et al., 2010)
-- Operate near the critical point (edge of chaos) where complex dynamics are richest
-- If Wilson-Cowan fails, fall back to simpler Kuramoto oscillators (phase-only) or more complex Jansen-Rit neural mass models
-
-### Risk 3: Hebbian Learning Instability
-**Severity:** Medium | **Probability:** High
-
-**Risk:** Hebbian learning is notoriously unstable --- positive feedback loops cause runaway excitation or winner-take-all dynamics that kill diversity.
-
-**Mitigation:**
-- Weight decay term to prevent unbounded growth
-- Synaptic scaling (homeostatic normalization of total input weights)
-- BCM (Bienenstock-Cooper-Munro) rule as alternative: includes sliding threshold that stabilizes learning
-- Careful monitoring of weight distributions during learning
-
-### Risk 4: MNIST Performance Too Low to Be Meaningful
-**Severity:** Low | **Probability:** High
-
-**Risk:** The system may achieve only marginally above-chance classification, making results hard to interpret or publish.
-
-**Mitigation:**
-- Frame the experiment correctly: the goal is not SOTA accuracy but demonstration of learning in a biologically structured system
-- Compare against meaningful baselines (random network with same learning rules, not deep learning)
-- If accuracy is very low, analyze what the system DOES learn (e.g., maybe it learns to distinguish "round" vs. "angular" digits even if it cannot classify all 10)
-
-### Risk 5: Computational Bottleneck at Scale
-**Severity:** Medium | **Probability:** Low
-
-**Risk:** GPU kernel launch overhead or memory bandwidth may limit simulation speed for 360-region models with high temporal resolution.
-
-**Mitigation:**
-- Profile early and optimize hot loops
-- Use JAX's JIT compilation to fuse operations
-- Reduce temporal resolution (dt=0.5ms instead of 0.1ms) if dynamics are smooth enough
-- The state space is tiny (~1,080 floats for 360 regions) --- the bottleneck will be connectivity matrix operations, which are well-optimized in CuPy/JAX
-
-### Risk 6: Scope Creep
-**Severity:** Medium | **Probability:** High
-
-**Risk:** The project's ambition (from oscillations to embodiment) invites scope creep. Trying to do everything in 6 months risks doing nothing well.
-
-**Mitigation:**
-- Hard phase gates: Experiments 1--4 (structure-only) must be complete and publishable before starting learning experiments
-- Embodiment (Phase 8) is explicitly marked as future/aspirational --- not a 6-month deliverable
-- First publication target covers only Experiments 1--4
+#### Deliverables
+- `src/encephagen/sensory/visual.py` — Image to spike train encoder
+- `src/encephagen/sensory/auditory.py` — Audio to spike train encoder
+- `src/encephagen/sensory/proprioceptive.py` — Body state encoder (placeholder)
+- Tests for encoding fidelity and propagation
 
 ---
 
-## 10. Publication Target
+### Milestone 4: Motor Output + Simple Environment (Month 3-4)
 
-### Primary Target: Computational Neuroscience Journals
+**Goal:** Motor region firing rates drive actions in a simple world. Close the sensory-motor loop.
 
-| Journal | Impact Factor | Fit | Timeline |
-|---------|--------------|-----|----------|
-| **PLoS Computational Biology** | ~4.5 | Excellent: computational neuroscience, open-access, reproducibility emphasis | Month 6 submission |
-| **NeuroImage** | ~5.7 | Good: connectome-based modeling, neuroimaging-relevant predictions | Month 6--8 |
-| **Nature Computational Science** | ~12 | Stretch: if results are striking (topology-dependent dynamics clearly demonstrated) | Month 6--8 |
-| **eLife** | ~7.7 | Good: open science, computational biology, welcomes novel approaches | Month 6--8 |
+**Why this is needed:** A brain without output is an observer, not an agent. Behavior = closing the loop between perception and action.
 
-### High-Impact Stretch Targets (If Results Are Extraordinary)
+#### Architecture
 
-| Journal | Rationale |
-|---------|-----------|
-| **Nature Neuroscience** | If we demonstrate that human connectome topology alone predicts known functional organization |
-| **PNAS** | Broad interest: emergence, complexity, brain simulation |
-| **Science** | If embodiment produces qualitatively brain-like sensorimotor behavior |
+```
+Simple environment: 2D grid world
+  - Agent (dot) at position (x, y)
+  - Target (food) at random position
+  - Agent "sees" the relative direction to food (4 neurons: up/down/left/right)
+  - Agent acts by moving in a direction
 
-### Conference Presentations
+Sensory input (→ sensory regions):
+  - 4 neurons encoding relative direction to food
+  - Rate coded: the neuron pointing toward food fires fastest
 
-- **OHBM (Organization for Human Brain Mapping):** Connectome analysis and simulation results
-- **CNS (Computational Neuroscience):** Wilson-Cowan dynamics and emergent oscillations
-- **NeurIPS (Workshop on Neuro-AI):** Bridge between neuroscience-inspired models and AI
+Motor output (← motor regions):
+  - Read firing rates from M1 region neurons
+  - Map to 4 actions: up/down/left/right
+  - Highest firing rate wins (winner-take-all)
 
-### Preprint Strategy
+Reward signal:
+  - Distance to food decreases → positive dopamine signal
+  - Distance increases → negative signal
+  - Reaches food → large positive signal
+```
 
-- First preprint (bioRxiv/arXiv) at Month 4: Experiments 1--4 results
-- Second preprint at Month 6: Learning experiments
-- All code, data pipelines, and trained models released as open-source Python package (`encephagen` on PyPI)
+#### Testing Plan
 
-### Media & Viral Potential
+```
+Test 4.1: Motor readout works
+  - Inject known firing pattern into M1
+  - Verify correct action is selected
 
-This project has unusually high media potential:
+Test 4.2: Sensory-motor loop runs
+  - Environment + brain run together for 1000 steps
+  - No crashes, no NaN, firing rates stay bounded
 
-- **"Digital newborn brain" narrative:** The idea of simulating a baby's brain and watching it "wake up" is inherently compelling to general audiences
-- **Visual output:** Real-time brain activity visualizations (heatmaps on 3D brain surface) produce striking imagery for social media, blog posts, and talks
-- **Interactive demo:** A web-based demo where users can "stimulate" the virtual brain and watch activity propagate would generate significant engagement
-- **Philosophical resonance:** The project touches on consciousness, emergence, nature vs. nurture, and what makes the human brain unique --- topics with broad public interest
-- **Open science angle:** All data, code, and results open-source, inviting community contribution and extension
+Test 4.3: Random baseline
+  - With random connection weights, agent moves randomly
+  - Average distance to food should not decrease over time
 
-Target platforms for media outreach:
-- Twitter/X science community
-- Hacker News / Reddit r/neuroscience, r/compsci
-- YouTube: animated visualization of brain dynamics
-- Blog post series documenting the journey (building in public)
+Test 4.4: Learning improves performance
+  - With STDP + reward modulation enabled
+  - Run for 10,000 steps
+  - Does average distance to food decrease compared to first 1,000 steps?
+  - If YES → the brain learned to navigate (this is the key result)
+  - If NO → adjust reward signal, learning rates, or architecture
+
+Test 4.5: Brain-structured vs random-wired
+  - Same task, same learning rules
+  - Real connectome vs degree-preserving random
+  - Does brain-structured network learn faster?
+  - (This would connect back to our topology findings)
+```
+
+#### Required Expertise
+- **Reinforcement learning:** Reward signal design, exploration-exploitation
+- **Computational neuroscience:** Motor population decoding, dopamine-modulated STDP
+- **SDE:** Real-time simulation loop, environment-brain interface
+- **Latest research:** Check Izhikevich (2007) "Solving the Distal Reward Problem" for dopamine-modulated STDP; Frémaux & Gerstner (2016) for three-factor learning rules
+
+#### Deliverables
+- `src/encephagen/environment/grid_world.py` — Simple 2D environment
+- `src/encephagen/motor/decoder.py` — Motor region → action mapping
+- `src/encephagen/loop/simulation_loop.py` — Continuous sense-act loop
+- Tests for motor readout, loop stability, and learning
+
+---
+
+### Milestone 5: Closed-Loop Continuous Operation (Month 4-5)
+
+**Goal:** The brain runs continuously, not in batched experiments. It lives in its world.
+
+**Why this is needed:** Real brains don't process "batches." They continuously perceive, think, and act. The closed loop is what makes it a brain vs a simulation.
+
+#### Architecture
+
+```
+Main loop (runs continuously):
+  while True:
+      sensory_spikes = encode(environment.observe())
+      brain.step(dt=0.1ms, external_input=sensory_spikes)
+      if time_for_action:  # every 50ms
+          action = decode(brain.motor_region.firing_rates)
+          environment.step(action)
+          reward = environment.get_reward()
+          brain.modulate_learning(reward)
+```
+
+#### Testing Plan
+
+```
+Test 5.1: Long-running stability
+  - Run for 10 minutes of simulation time (6 million timesteps)
+  - No crash, no memory leak, firing rates bounded
+
+Test 5.2: Behavior emerges over time
+  - Record agent trajectory over 10 minutes
+  - First minute: random-looking movement
+  - Last minute: more directed movement toward food
+  
+Test 5.3: Sleep/wake cycle (stretch goal)
+  - Reduce sensory input to zero periodically ("closing eyes")
+  - Does the network activity change qualitatively?
+  - Does it show "replay" of recent experience? (hippocampal replay)
+
+Test 5.4: Real-time visualization
+  - Live dashboard showing: environment, brain activity heatmap,
+    firing rates per region, learning progress
+  - Using matplotlib animation or web-based (Flask/websocket)
+```
+
+#### Required Expertise
+- **SDE:** Performance optimization, memory management for long runs, real-time visualization
+- **Systems programming:** Event loop design, efficient simulation stepping
+- **Latest research:** Check Zenke et al. (2015) for online learning in spiking networks at scale
+
+#### Deliverables
+- `src/encephagen/loop/continuous_runner.py` — Main simulation loop
+- `src/encephagen/viz/live_dashboard.py` — Real-time visualization
+- Long-running stability tests
+- Video recording of emergent behavior
+
+---
+
+### Milestone 6: Virtual Body (Month 5-8)
+
+**Goal:** Replace the 2D grid world with a physics-simulated body. The brain controls limbs, feels contact, sees through cameras.
+
+**Why this is needed:** This is the fruit fly experiment for humans. A virtual creature with a human-brain-structured controller.
+
+#### Architecture
+
+```
+Physics engine: MuJoCo (industry standard for robot learning)
+
+Body: simplified humanoid
+  - Torso + 2 arms + 2 legs
+  - Each limb: 2 joints (shoulder/elbow, hip/knee)
+  - Total: 8 joints = 8 motor outputs
+  - Each joint has: angle sensor, velocity sensor, torque actuator
+
+Brain-body mapping:
+  Motor cortex (M1) → 8 joint torques
+  Somatosensory (S1) ← 16 joint sensors (8 angles + 8 velocities)
+  Visual cortex (V1) ← camera image (low resolution, e.g., 16x16)
+  Reward ← standing upright, moving forward
+```
+
+#### Testing Plan
+
+```
+Test 6.1: MuJoCo integration
+  - Body loads, physics runs, no crashes
+  - Brain receives sensory input, sends motor commands
+
+Test 6.2: Random brain activity produces movement
+  - Even without learning, motor output should move joints
+  - Body should flail randomly (sanity check)
+
+Test 6.3: Learning to stand
+  - Reward: keep torso above ground
+  - After N hours of training: does it learn to not fall?
+  
+Test 6.4: Learning to reach
+  - Target object placed near hand
+  - Reward: hand gets closer to target
+  - After training: can the body reach toward objects?
+
+Test 6.5: Brain-structured vs random-structured
+  - Same body, same reward, same learning rules
+  - Real connectome vs random wiring as brain structure
+  - Does the brain-structured controller learn faster?
+  - (This is the ultimate test of the project)
+```
+
+#### Required Expertise
+- **Robotics/MuJoCo:** Body design, physics tuning, sensor/actuator mapping
+- **Computational neuroscience:** Motor population coding, sensorimotor integration, cerebellum for motor learning
+- **RL:** Reward shaping, curriculum learning (stand → walk → reach)
+- **SDE:** MuJoCo-Python bridge, real-time brain-body simulation
+- **Latest research:** Check Merel et al. (2019) "Neural Probabilistic Motor Primitives" for motor control; Tassa et al. (2018) for MuJoCo environments
+
+#### Deliverables
+- `src/encephagen/body/mujoco_body.py` — Virtual body definition
+- `src/encephagen/body/brain_body_interface.py` — Sensor/motor mapping
+- Video of the virtual creature learning to move
+- Comparison: brain-structured vs random-structured learning curves
+
+---
+
+## 4. Team Roles Needed
+
+| Role | What they do | When needed |
+|---|---|---|
+| **Computational Neuroscientist** | LIF parameters, STDP tuning, biological plausibility, paper writing | All milestones |
+| **SDE (Systems)** | Performance optimization, sparse matrix ops, memory management, MuJoCo integration | Milestones 1, 4, 5, 6 |
+| **ML/RL Engineer** | Reward design, learning rule validation, scaling experiments | Milestones 2, 4, 6 |
+| **Signal Processing** | Sensory encoding (visual, auditory), spike train analysis | Milestone 3 |
+| **Research Lead** | Literature tracking, experimental design, result interpretation | All milestones |
+| **Visualization** | Live dashboards, figure generation, demo videos | Milestones 5, 6 |
+
+For early milestones (1-3), a single person with Python/PyTorch skills and willingness to read neuroscience papers can do most of the work. Milestones 4-6 benefit significantly from collaboration.
+
+---
+
+## 5. Hardware Requirements
+
+| Milestone | Neurons | Synapses | Memory | GPU needed? |
+|---|---|---|---|---|
+| 1 (Spiking) | 96K | ~100M | ~4 GB | Helpful |
+| 2 (Learning) | 96K | ~100M | ~6 GB (weight history) | Helpful |
+| 3 (Sensory) | 96K + encoders | ~100M | ~4 GB | Optional |
+| 4 (Motor + env) | 96K | ~100M | ~5 GB | Optional |
+| 5 (Continuous) | 96K | ~100M | ~6 GB | Helpful |
+| 6 (MuJoCo) | 96K | ~100M | ~8 GB | Yes (rendering) |
+
+All milestones fit on the RTX 5070 (12 GB VRAM) / 16 GB RAM.
+
+---
+
+## 6. Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| 96K LIF neurons don't reproduce Wilson-Cowan findings | Medium | High | Tune E/I balance, may need 10K neurons per region instead of 1K |
+| STDP causes instability (runaway or death) | High | Medium | Homeostatic plasticity, weight clipping, careful parameter tuning |
+| Motor output from spiking network is too noisy | High | Medium | Population decoding with averaging, low-pass filtering |
+| MuJoCo body is too complex for 96K neuron brain | High | High | Start with simplest body (single joint), scale up gradually |
+| Brain-structured network doesn't learn faster than random | Medium | High | This is a valid scientific result — report it honestly |
+| Performance too slow for continuous loop | Medium | Medium | Norse GPU acceleration, reduce neuron count, optimize sparse ops |
+| Scope creep — trying to do too much | High | High | Strict milestone gating — don't start M(n+1) until M(n) passes all tests |
+
+---
+
+## 7. Success Criteria
+
+**Minimum success (publishable):**
+- Spiking network reproduces macro-level hierarchy findings (Milestone 1)
+- STDP learning produces measurable familiarity effect (Milestone 2)
+
+**Medium success (notable):**
+- Brain learns to navigate simple environment (Milestone 4)
+- Brain-structured network shows advantage over random-wired (Milestone 4, Test 4.5)
+
+**Maximum success (landmark):**
+- Virtual creature with human-brain-structure learns to control its body (Milestone 6)
+- This has never been done and would be front-page news
+
+---
+
+## 8. Key References
+
+### Foundational (must cite)
+- Gollo et al. (2015) — Rich-club nodes develop slower dynamics from identical oscillators
+- Zamora-Lopez & Gilson (2025) — Wilson-Cowan on connectome, regional diversity
+- Murray et al. (2014) — Empirical timescale hierarchy
+- Lappalainen et al. (2024) — Drosophila connectome predicts function
+
+### Spiking networks on connectomes
+- Billeh et al. (2020) — 230K neuron V1 model (Allen Institute)
+- Potjans & Diesmann (2014) — Cortical microcircuit model
+- Schmidt et al. (2018) — Multi-area spiking model of macaque cortex
+
+### Learning rules
+- Bi & Poo (1998) — STDP discovery
+- Zenke & Ganguli (2018) — SuperSpike learning rule
+- Frémaux & Gerstner (2016) — Three-factor learning rules
+- Bellec et al. (2020) — e-prop biologically plausible learning
+
+### Embodiment
+- Merel et al. (2019) — Neural probabilistic motor primitives
+- OpenWorm (2014-present) — C. elegans whole-organism simulation
+- Eon Systems fly-brain (2024-present) — Drosophila brain emulation
