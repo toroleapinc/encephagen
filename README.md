@@ -2,36 +2,32 @@
 
 **Does human brain wiring create functional organization from identical parts?**
 
-We simulate Wilson-Cowan dynamics on the 96-region human connectome with **identical parameters at every region** — and find that regions develop distinct functional roles purely from their position in the network. We then decompose this effect: **degree distribution** determines the functional hierarchy (which regions oscillate), while **specific wiring** determines functional connectivity patterns (which regions communicate).
+We simulate neural dynamics on the 96-region human macro-connectome (from diffusion MRI tractography, not synaptic-resolution imaging) with **identical parameters at every region**. We find that regions develop distinct functional roles purely from their position in the network — and that the choice of dynamics model dramatically changes which hierarchy emerges.
 
-![Phase Transition](figures/fig1_phase_transition.png)
-
-*With identical parameters everywhere, brain regions silence in a specific order as coupling increases. Basal ganglia never silences. Thalamus and motor cortex silence first. This ordering emerges purely from connectivity topology.*
+This is an **open-source research project**, not a finished paper. It includes positive findings, null results, and one invalidated claim. All experiments, including controls, are included.
 
 ## Key Findings
 
-### Finding 1: Degree distribution creates a functional hierarchy
+### Finding 1: Wilson-Cowan and spiking models produce OPPOSITE hierarchies
 
-With identical Wilson-Cowan parameters, high-degree regions (basal ganglia) maintain oscillations while low-degree regions (sensory, thalamus) are silenced. Prefrontal cortex develops **8x longer time constants** than sensory cortex (p=0.01). Degree-preserving rewiring produces the same hierarchy — confirming this is driven by connection count, not specific targets.
+This is the most scientifically interesting result.
 
-This extends prior work by [Gollo et al. (2015)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4387508/) and [Zamora-Lopez & Gilson (2025)](https://www.jneurosci.org/content/45/10/e1699242024), who showed that hub nodes develop longer timescales from identical oscillators on the connectome.
+With identical Wilson-Cowan parameters, **basal ganglia are most active** and sensory cortex is silenced. With identical LIF spiking neurons, the hierarchy **inverts**: **sensory cortex fires fastest** (12.5 Hz) and **prefrontal fires slowest** (7.5 Hz).
 
-![Hierarchy](figures/fig2_hierarchy_bar.png)
+The spiking hierarchy matches the empirical cortical timescale gradient ([Murray et al. 2014](https://www.nature.com/articles/nn.3862)). The Wilson-Cowan hierarchy does not. This suggests mean-field models (WC) and spiking models respond differently to heterogeneous degree distributions — a finding that deserves investigation.
 
-*All 96 regions ranked by oscillation strength. Basal ganglia (red) dominates. Prefrontal (blue) is moderate. Everything else is near-silent. Differentiation is purely from network position.*
+**Caveat:** Our "hierarchy match" compares firing rates, not autocorrelation timescales. A proper comparison requires computing autocorrelation decay from spike trains (not yet done).
 
-### Finding 2: Specific wiring shapes functional connectivity patterns
+### Finding 2: Two-level decomposition of topology effects
 
-Degree-preserving rewiring preserves the hierarchy but **destroys specific inter-regional communication patterns**. 11 functional connectivity metrics differ significantly (p<0.05) between the real connectome and degree-matched random wiring:
+![Phase Transition](figures/fig1_phase_transition.png)
 
-- **BG-sensory coupling**: Real wiring creates positive coupling; random wiring creates negative (p=0.0001)
-- **Hippocampal-thalamic coupling**: Stronger in real wiring (p=0.025) — consistent with known memory-relay circuitry
-- **Sensory internal coherence**: Higher in real wiring (p=0.0005)
-- **Hippocampus-motor decoupling**: Real wiring decouples them; random wiring couples them (p=0.0001)
+Using degree-preserving rewiring to separate what **degree distribution** contributes vs what **specific wiring** contributes:
+
+- **Degree distribution** determines the functional hierarchy — which regions oscillate, their time constants, frequencies. Degree-preserving rewiring reproduces this. (24 significant metrics)
+- **Specific wiring** determines functional connectivity patterns — which regions communicate with which. This is destroyed by rewiring. (11 significant metrics, including BG-sensory coupling p=0.0001, hippocampal-thalamic coupling p=0.025)
 
 ![FC Comparison](figures/fig3_fc_comparison.png)
-
-*Group-averaged functional connectivity. Left: real connectome. Middle: degree-preserving random. Right: difference. The difference panel shows what specific wiring contributes beyond degree distribution.*
 
 ### Finding 3: A novel silencing order
 
@@ -45,24 +41,44 @@ As global coupling increases, brain regions silence in a characteristic order:
 | 0.050 | Prefrontal cortex |
 | Never | **Basal ganglia** |
 
-This ordering has not been reported in prior literature and represents a topological resilience hierarchy emergent from identical local dynamics.
+![Hierarchy](figures/fig2_hierarchy_bar.png)
 
-### Finding 4: Real wiring > random wiring
+### Finding 4: STDP produces habituation (weak effect, needs more statistics)
 
-The real connectome produces significantly more regional differentiation than degree-preserving random rewiring (variance CV: 1.93 vs 1.81, p=0.0097). The specific wiring pattern of the human brain adds structure beyond what degree distribution alone provides.
+After 30 presentations of a stimulus pattern with STDP learning, the familiar pattern produces a 0.80 Hz weaker response than a novel pattern (repetition suppression). **No permutation test has been performed yet** — this effect may not survive rigorous statistical testing.
+
+### Invalidated Claim: "Brain learned to stand"
+
+Experiment 7 claimed the brain learned to keep a MuJoCo body upright. **Experiment 9 (control) invalidated this:**
+
+- STDP without reward modulation produces the same result → reward modulation adds nothing
+- Motor output torque std drops from 0.26 to 0.03 after STDP → the body is standing **stiff**, not actively balancing
+- The "0% fall rate" was motor death, not learned motor control
+
+### Null Result: Topology doesn't help embodied learning
+
+Experiment 8 compared real connectome vs degree-preserving random wiring for embodied learning. **No significant difference** (reward: 59.6 vs 60.7). The specific wiring pattern does not accelerate motor learning at this scale.
+
+## Important Caveats
+
+**This project uses diffusion MRI tractography data (TVB96), NOT synaptic-resolution connectomics.** The TVB96 matrix is a 96×96 group-averaged estimate of fiber bundle counts between brain regions. It does not provide:
+- Individual synapse resolution (unlike C. elegans/Drosophila connectomes)
+- Neurotransmitter identity per connection
+- Directionality at the cellular level
+- Individual subject variation
+
+Claims in this project should be interpreted at the macro-connectome level, not compared to synaptic-resolution projects like OpenWorm or FlyWire.
 
 ## Relation to Prior Work
 
-This work builds on and extends several important prior studies:
-
 | Prior work | What they showed | What we add |
 |---|---|---|
-| [Gollo et al. 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4387508/) | Rich-club nodes develop slower dynamics from identical oscillators | Two-level decomposition: degree → hierarchy, wiring → FC |
-| [Zamora-Lopez & Gilson 2025](https://www.jneurosci.org/content/45/10/e1699242024) | Wilson-Cowan with identical params shows regional diversity | Explicit separation of degree-driven vs wiring-driven effects |
-| [Murray et al. 2014](https://www.nature.com/articles/nn.3862) | Empirical timescale hierarchy across cortex | Our model reproduces this without heterogeneous parameters |
-| [Chaudhuri et al. 2015](https://www.cns.nyu.edu/wanglab/publications/pdf/chaudhuri_neuron2015.pdf) | Timescale hierarchy requires parameter gradient | We show topology alone produces a hierarchy (though less precise) |
-| [Cabral et al. 2011](https://pubmed.ncbi.nlm.nih.gov/21511044/) | FC from identical Kuramoto on connectome | We decompose which topology features drive which dynamics |
-| [Deco et al. 2014](https://www.jneurosci.org/content/34/23/7910) | Optimal SC-FC relationship at bifurcation | We go beyond FC matching to functional role emergence |
+| [Gollo et al. 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4387508/) | Rich-club nodes develop slower dynamics from identical oscillators | Two-level decomposition + WC/spiking inversion |
+| [Zamora-Lopez & Gilson 2025](https://www.jneurosci.org/content/45/10/e1699242024) | Wilson-Cowan with identical params shows regional diversity | Degree vs wiring separation; spiking model comparison |
+| [Murray et al. 2014](https://www.nature.com/articles/nn.3862) | Empirical timescale hierarchy across cortex | Spiking model reproduces hierarchy (firing rate, not timescale) |
+| [Chaudhuri et al. 2015](https://www.cns.nyu.edu/wanglab/publications/pdf/chaudhuri_neuron2015.pdf) | Timescale hierarchy requires parameter gradient | We show topology alone produces a hierarchy (needs more validation) |
+| [Honey et al. 2007](https://www.pnas.org/doi/10.1073/pnas.0701519104) | Connectome topology shapes dynamics (macaque) | Extended to spiking neurons on human data |
+| [Váša & Mišić 2022](https://www.nature.com/articles/s41583-022-00601-9) | Null models in network neuroscience | Applied their framework for degree/wiring decomposition |
 
 ## Quick Start
 
@@ -94,44 +110,50 @@ print(f"Basal ganglia variance: {bg.var():.4f}")  # ~0.18
 print(f"Visual cortex variance: {v1.var():.6f}")   # ~0.00002
 ```
 
-## Reproduce All Experiments
+## All Experiments
 
 ```bash
 git clone https://github.com/toroleapinc/encephagen.git
 cd encephagen
 pip install -e ".[dev]"
+conda install -c conda-forge mujoco  # For embodied experiments
 
-# Experiment 1: Initial predictions (TVB76)
-python experiments/01_emergent_roles.py
+# Phase 1: Wilson-Cowan hierarchy
+python experiments/01_emergent_roles.py         # TVB76 predictions
+python experiments/02_comprehensive.py          # TVB96 + subcortical
+python experiments/03_deep_analysis.py          # Silencing order
+python experiments/04_isolate_topology.py       # Degree vs wiring
 
-# Experiment 2: TVB96 with subcortical + null comparison
-python experiments/02_comprehensive.py
+# Spiking network
+python experiments/05_spiking_hierarchy.py      # LIF hierarchy test
 
-# Experiment 3: Phase transition + deep analysis
-python experiments/03_deep_analysis.py
+# Learning
+python experiments/06_familiarity_learning.py   # STDP habituation
 
-# Experiment 4: Isolate degree vs specific wiring
-python experiments/04_isolate_topology.py
+# Embodied (includes negative/null results)
+python experiments/07_learn_to_stand.py         # Initial claim
+python experiments/08_topology_vs_random_embodied.py  # Null result
+python experiments/09_learning_control.py       # Invalidates Exp 7
 
-# Generate figures
+# Figures
 python scripts/generate_figures.py
 ```
 
+## Known Limitations
+
+- **96-region parcellation is coarse** — Glasser 360 or Schaefer 200 needed for validation
+- **WC and spiking give opposite hierarchies** — unexplained, central open question
+- **Null model instances too few (15-20)** — need 100 for robust statistics
+- **No conduction delays** — tract lengths available but not incorporated
+- **Familiarity effect lacks statistical test** — 0.80 Hz effect, no permutation test
+- **LIF E/I balance is parameter-sensitive** — j_eff auto-scaling is empirical, not principled
+- **Performance too slow** for large-scale experiments — need NEST/Brian2/Norse
+- **No conductance-based synapses** — current-based model misses voltage-dependent effects
+- **Embodied learning does not work** — STDP produces motor silence, not active control
+
 ## Data
 
-Structural connectivity from [The Virtual Brain](https://www.thevirtualbrain.org/) project:
-- **TVB76**: 76 cortical regions
-- **TVB96**: 80 cortical + 16 subcortical regions (thalamus, basal ganglia, amygdala)
-
-Both derived from Human Connectome Project diffusion MRI tractography.
-
-## Limitations
-
-- **96-region parcellation is coarse** — finer parcellations (360 regions) may reveal additional structure
-- **Wilson-Cowan only** — additional dynamics models (Hopf, Jansen-Rit) would strengthen robustness claims
-- **No conduction delays** — tract lengths are available but not yet incorporated
-- **Basal ganglia resilience may be parcellation-dependent** — the TVB96 atlas assigns high degree to BG regions, which may not hold in other atlases
-- **The functional connectivity effects are small** (r ≈ 0.01-0.02 differences) — statistically significant but practically modest
+Structural connectivity from [The Virtual Brain](https://www.thevirtualbrain.org/) project, derived from diffusion MRI tractography (group-averaged). This is macro-scale white matter connectivity, not synaptic-resolution imaging.
 
 ## Citation
 
@@ -146,16 +168,19 @@ Both derived from Human Connectome Project diffusion MRI tractography.
 
 ## Related Projects
 
-- **[conntopo](https://github.com/toroleapinc/conntopo)** — Toolkit for comparing connectome dynamics against null models (Kuramoto + Wilson-Cowan). The foundation this project builds on.
-- **[cortexlet](https://github.com/toroleapinc/cortexlet)** — Brain-topology-structured trainable neural network for ML tasks.
+- **[conntopo](https://github.com/toroleapinc/conntopo)** — Toolkit for comparing connectome dynamics against null models.
+- **[cortexlet](https://github.com/toroleapinc/cortexlet)** — Brain-topology-structured trainable neural network.
 
 ## Contributing
 
-This is an open-source research project. Contributions welcome — especially:
-- Testing with different parcellations (Schaefer 200, Glasser 360)
-- Adding dynamics models (Hopf, Jansen-Rit)
-- Conduction delay incorporation
-- Replication on other connectome datasets
+This is an open-source research project. Contributions especially welcome for:
+- Testing with finer parcellations (Schaefer 200, Glasser 360)
+- Explaining the WC/spiking hierarchy inversion
+- Implementing conduction delays
+- Replacing STDP with modern learning rules (e-prop, three-factor rules)
+- Performance optimization (NEST/Brian2/Norse migration)
+- Proper autocorrelation timescale analysis
+- Statistical strengthening (100 null instances, permutation tests)
 
 ## License
 
