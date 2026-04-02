@@ -1,8 +1,12 @@
 """Leaky Integrate-and-Fire (LIF) neuron model.
 
-Vectorized implementation for simulating large populations efficiently.
-All neurons share the same parameters (identical dynamics) — any
-differentiation emerges from connectivity.
+Vectorized implementation with separate excitatory and inhibitory
+synaptic currents. Parameters calibrated following Brunel (2000)
+balanced network theory for the fluctuation-driven regime.
+
+References:
+    Brunel (2000). Dynamics of Sparsely Connected Networks of Excitatory
+    and Inhibitory Spiking Neurons. J Comput Neurosci.
 """
 
 from __future__ import annotations
@@ -14,26 +18,40 @@ import numpy as np
 
 @dataclass
 class LIFParams:
-    """Parameters for LIF neurons."""
+    """Parameters for LIF neurons.
 
-    tau_m_exc: float = 20.0      # Excitatory membrane time constant (ms)
-    tau_m_inh: float = 10.0      # Inhibitory membrane time constant (ms)
-    v_rest: float = -65.0        # Resting potential (mV)
-    v_threshold: float = -50.0   # Spike threshold (mV)
-    v_reset: float = -70.0       # Reset potential after spike (mV)
+    Defaults calibrated for a balanced network in the asynchronous
+    irregular (AI) regime (~5-15 Hz firing rates). Based on Brunel (2000)
+    and Potjans & Diesmann (2014).
+    """
+
+    # Membrane
+    tau_m: float = 20.0          # Membrane time constant (ms)
+    v_rest: float = 0.0          # Resting potential (mV) — normalized
+    v_threshold: float = 20.0    # Spike threshold (mV) — normalized
+    v_reset: float = 0.0         # Reset potential after spike (mV)
     t_ref: float = 2.0           # Refractory period (ms)
-    r_m: float = 100.0           # Membrane resistance (MΩ)
+
+    # Synaptic
     tau_syn_exc: float = 5.0     # Excitatory synaptic time constant (ms)
-    tau_syn_inh: float = 10.0    # Inhibitory synaptic time constant (ms)
-    w_exc: float = 0.5           # Excitatory synaptic weight (nA)
-    w_inh: float = -2.0          # Inhibitory synaptic weight (nA)
+    tau_syn_inh: float = 5.0     # Inhibitory synaptic time constant (ms)
+
+    # Weights (in mV — PSP amplitude)
+    j_exc: float = 2.0           # Excitatory PSP amplitude (mV) — scaled for C_E~16
+    g_inh: float = 5.0           # Relative inhibitory strength (|J_inh| = g * J_exc)
+    # So J_inh = -g_inh * j_exc = -0.5 mV
 
 
 class LIFNeurons:
-    """Vectorized LIF neuron population.
+    """Vectorized LIF neuron population with separate E/I synaptic currents.
 
-    Manages membrane potentials, refractory states, and synaptic currents
-    for N neurons simultaneously using NumPy arrays.
+    Uses the Brunel (2000) formulation where synaptic input is in units
+    of PSP amplitude (mV), not current (nA). This simplifies E/I balance
+    calibration.
+
+    The membrane equation is:
+        tau_m * dV/dt = -V + I_syn_exc + I_syn_inh + I_ext
+    where V is measured from V_rest (so V_rest = 0).
     """
 
     def __init__(
@@ -52,22 +70,18 @@ class LIFNeurons:
         self.p = params or LIFParams()
         self.rng = np.random.default_rng(seed)
 
-        # State arrays
-        self.v = np.full(n, self.p.v_rest, dtype=np.float64)
-        self.v += self.rng.uniform(-5, 5, size=n)  # Small initial perturbation
+        # Membrane potential (relative to V_rest, so range [0, V_threshold])
+        self.v = self.rng.uniform(0, self.p.v_threshold, size=n)
 
         # Refractory timer (ms remaining)
         self.refrac_timer = np.zeros(n, dtype=np.float64)
 
-        # Synaptic current accumulators
-        self.i_syn = np.zeros(n, dtype=np.float64)
+        # SEPARATE excitatory and inhibitory synaptic currents
+        self.i_exc = np.zeros(n, dtype=np.float64)
+        self.i_inh = np.zeros(n, dtype=np.float64)
 
-        # Spike output (binary)
+        # Spike output
         self.spikes = np.zeros(n, dtype=bool)
-
-        # Per-neuron membrane time constant
-        self.tau_m = np.full(n, self.p.tau_m_exc, dtype=np.float64)
-        self.tau_m[n_exc:] = self.p.tau_m_inh
 
         # Is excitatory mask
         self.is_exc = np.zeros(n, dtype=bool)
@@ -78,21 +92,21 @@ class LIFNeurons:
 
         Args:
             dt: Timestep in ms.
-            i_ext: External current per neuron [n], in nA. Optional.
+            i_ext: External input per neuron [n], in mV. Optional.
 
         Returns:
             Boolean spike array [n].
         """
-        # Total input current
-        i_total = self.i_syn.copy()
+        # Total synaptic input
+        i_total = self.i_exc + self.i_inh
         if i_ext is not None:
-            i_total += i_ext
+            i_total = i_total + i_ext
 
         # Neurons not in refractory period
         active = self.refrac_timer <= 0
 
-        # Membrane dynamics: dV/dt = (-(V - V_rest) + R * I) / tau_m
-        dv = (-(self.v - self.p.v_rest) + self.p.r_m * i_total) / self.tau_m
+        # Membrane dynamics: tau_m * dV/dt = -V + I_total
+        dv = (-self.v + i_total) / self.p.tau_m
         self.v[active] += dt * dv[active]
 
         # Spike detection
@@ -105,40 +119,39 @@ class LIFNeurons:
         # Decrement refractory timer
         self.refrac_timer = np.maximum(0, self.refrac_timer - dt)
 
-        # Decay synaptic currents
-        exc_decay = np.exp(-dt / self.p.tau_syn_exc)
-        inh_decay = np.exp(-dt / self.p.tau_syn_inh)
-        # Apply appropriate decay based on whether current is from exc or inh
-        # Simplified: just use average decay
-        self.i_syn *= 0.5 * (exc_decay + inh_decay)
+        # Decay synaptic currents SEPARATELY
+        self.i_exc *= np.exp(-dt / self.p.tau_syn_exc)
+        self.i_inh *= np.exp(-dt / self.p.tau_syn_inh)
 
         return self.spikes.copy()
 
-    def receive_spikes(self, pre_spikes: np.ndarray, weights: np.ndarray) -> None:
-        """Receive synaptic input from presynaptic spikes.
+    def receive_exc_spikes(self, n_spikes_per_neuron: np.ndarray) -> None:
+        """Receive excitatory synaptic input.
 
         Args:
-            pre_spikes: Boolean array of presynaptic spikes [n_pre].
-            weights: Synaptic weight matrix [n_pre, n_post].
-                     Rows = presynaptic, columns = postsynaptic.
-                     Only rows where pre_spikes=True are used.
+            n_spikes_per_neuron: Number of excitatory presynaptic spikes
+                                 arriving at each neuron [n].
         """
-        if not pre_spikes.any():
-            return
+        self.i_exc += n_spikes_per_neuron * self.p.j_exc
 
-        # Sum weighted input from all spiking presynaptic neurons
-        spiking_indices = np.where(pre_spikes)[0]
-        self.i_syn += weights[spiking_indices].sum(axis=0)
+    def receive_inh_spikes(self, n_spikes_per_neuron: np.ndarray) -> None:
+        """Receive inhibitory synaptic input.
+
+        Args:
+            n_spikes_per_neuron: Number of inhibitory presynaptic spikes
+                                 arriving at each neuron [n].
+        """
+        self.i_inh -= n_spikes_per_neuron * self.p.j_exc * self.p.g_inh
 
     @property
     def firing_rates(self) -> np.ndarray:
-        """Current spikes as float (for compatibility)."""
+        """Current spikes as float."""
         return self.spikes.astype(np.float64)
 
     def reset(self) -> None:
         """Reset all state to initial conditions."""
-        self.v[:] = self.p.v_rest
-        self.v += self.rng.uniform(-5, 5, size=self.n)
+        self.v = self.rng.uniform(0, self.p.v_threshold, size=self.n)
         self.refrac_timer[:] = 0
-        self.i_syn[:] = 0
+        self.i_exc[:] = 0
+        self.i_inh[:] = 0
         self.spikes[:] = False

@@ -1,8 +1,9 @@
-"""RegionPopulation: a brain region as a population of spiking neurons.
+"""RegionPopulation: a brain region as a balanced E/I spiking network.
 
 Each region contains excitatory and inhibitory LIF neurons with
-random internal connectivity. Between-region connections follow
-the macro-connectome.
+sparse random internal connectivity. Uses Brunel (2000) balanced
+network recipe: mean input is near threshold, firing is driven
+by fluctuations.
 """
 
 from __future__ import annotations
@@ -14,10 +15,12 @@ from encephagen.neurons.lif import LIFNeurons, LIFParams
 
 
 class RegionPopulation:
-    """A brain region modeled as a population of spiking neurons.
+    """A brain region modeled as a balanced E/I spiking population.
 
-    Contains N neurons (80% excitatory, 20% inhibitory by default)
-    with sparse random internal connectivity.
+    Internal connectivity follows Brunel's balanced network:
+    - Each neuron receives C_E excitatory and C_I inhibitory connections
+    - E/I balance: g * C_I / C_E ≈ 1 for balance
+    - Background external input pushes mean voltage near threshold
     """
 
     def __init__(
@@ -25,7 +28,7 @@ class RegionPopulation:
         name: str,
         n_neurons: int = 1000,
         exc_ratio: float = 0.8,
-        internal_conn_prob: float = 0.1,
+        conn_prob: float = 0.1,
         params: LIFParams | None = None,
         seed: int | None = None,
     ):
@@ -42,52 +45,53 @@ class RegionPopulation:
             n=n_neurons, n_exc=self.n_exc, params=self.params, seed=seed,
         )
 
-        # Internal connectivity (sparse)
-        # Excitatory neurons → all neurons (weight > 0)
-        # Inhibitory neurons → all neurons (weight < 0)
-        self.internal_weights = self._build_internal_connectivity(
-            n_neurons, self.n_exc, internal_conn_prob, rng,
-        )
+        # Internal connectivity as sparse binary matrices
+        # exc_conn[i,j] = 1 means excitatory neuron i projects to neuron j
+        # inh_conn[i,j] = 1 means inhibitory neuron i projects to neuron j
+        exc_mask = rng.random((self.n_exc, n_neurons)) < conn_prob
+        inh_mask = rng.random((self.n_inh, n_neurons)) < conn_prob
+        # No self-connections for exc neurons (inh are indexed separately)
+        for i in range(self.n_exc):
+            exc_mask[i, i] = False
 
-    def _build_internal_connectivity(
-        self, n: int, n_exc: int, prob: float, rng: np.random.Generator,
-    ) -> sparse.csr_matrix:
-        """Build sparse random internal connectivity matrix."""
-        # Generate random connections
-        mask = rng.random((n, n)) < prob
-        np.fill_diagonal(mask, False)  # No self-connections
+        self.exc_conn = sparse.csr_matrix(exc_mask.astype(np.float64))
+        self.inh_conn = sparse.csr_matrix(inh_mask.astype(np.float64))
 
-        # Set weights based on pre-synaptic neuron type
-        weights = np.zeros((n, n), dtype=np.float64)
-        weights[:n_exc, :] = mask[:n_exc, :] * self.params.w_exc   # Exc → all
-        weights[n_exc:, :] = mask[n_exc:, :] * self.params.w_inh   # Inh → all
+        # Count connections per neuron (for diagnostics)
+        self.c_exc = int(self.exc_conn.sum() / n_neurons)  # avg exc inputs per neuron
+        self.c_inh = int(self.inh_conn.sum() / n_neurons)  # avg inh inputs per neuron
 
-        return sparse.csr_matrix(weights)
-
-    def step(self, dt: float, external_current: np.ndarray | None = None) -> np.ndarray:
+    def step(self, dt: float, external_input: np.ndarray | None = None) -> np.ndarray:
         """Advance one timestep.
 
         Args:
             dt: Timestep in ms.
-            external_current: External current per neuron [n_neurons]. Optional.
+            external_input: External input per neuron [n_neurons] in mV.
 
         Returns:
             Boolean spike array [n_neurons].
         """
-        # Internal synaptic input from previous spikes
-        if self.neurons.spikes.any():
-            spiking = self.neurons.spikes
-            # Sparse matrix-vector multiply: sum weights from spiking neurons
-            syn_input = self.internal_weights[spiking].toarray().sum(axis=0)
-            self.neurons.i_syn += syn_input
+        # Internal synaptic input from previous timestep's spikes
+        exc_spikes = self.neurons.spikes[:self.n_exc]
+        inh_spikes = self.neurons.spikes[self.n_exc:]
+
+        if exc_spikes.any():
+            # Count exc spikes arriving at each neuron
+            exc_input = self.exc_conn[exc_spikes].toarray().sum(axis=0)
+            self.neurons.receive_exc_spikes(exc_input)
+
+        if inh_spikes.any():
+            # Count inh spikes arriving at each neuron
+            inh_input = self.inh_conn[inh_spikes].toarray().sum(axis=0)
+            self.neurons.receive_inh_spikes(inh_input)
 
         # Step neurons
-        spikes = self.neurons.step(dt, i_ext=external_current)
+        spikes = self.neurons.step(dt, i_ext=external_input)
         return spikes
 
     @property
     def mean_firing_rate_hz(self) -> float:
-        """Instantaneous fraction of neurons spiking (proxy for rate)."""
+        """Instantaneous fraction of neurons spiking."""
         return float(self.neurons.spikes.sum()) / self.n_neurons
 
     @property
