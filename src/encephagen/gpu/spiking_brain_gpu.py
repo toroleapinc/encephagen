@@ -62,8 +62,11 @@ class SpikingBrainGPU(nn.Module):
         dt: float = 0.1,
         # Synaptic
         tau_syn: float = 5.0,
+        tau_nmda: float = 150.0,
+        nmda_ratio: float = 0.3,
         j_exc: float = 2.0,
         g_inh: float = 5.0,
+        pfc_regions: list | None = None,
         device: str = "cuda",
     ):
         super().__init__()
@@ -82,6 +85,8 @@ class SpikingBrainGPU(nn.Module):
         self.v_reset = v_reset
         self.t_ref = t_ref
         self.tau_syn = tau_syn
+        self.tau_nmda = tau_nmda
+        self.nmda_ratio = nmda_ratio
         self.device = torch.device(device)
 
         # Scale j_exc by C_E
@@ -129,6 +134,16 @@ class SpikingBrainGPU(nn.Module):
             self.labels = list(connectome.labels)
         else:
             self.labels = [f"region_{i}" for i in range(n_regions)]
+
+        # PFC mask for NMDA-like slow synapses
+        pfc_mask = torch.zeros(n_total, dtype=torch.bool)
+        if pfc_regions is not None:
+            for ri in pfc_regions:
+                pfc_mask[ri * neurons_per_region:(ri + 1) * neurons_per_region] = True
+        self.register_buffer("pfc_mask", pfc_mask)
+        n_pfc = pfc_mask.sum().item()
+        if n_pfc > 0:
+            print(f"  NMDA slow synapses: {n_pfc} PFC neurons (tau={tau_nmda}ms)")
 
         # Move to device
         self.to(self.device)
@@ -193,6 +208,7 @@ class SpikingBrainGPU(nn.Module):
         return {
             "v": torch.rand(batch_size, self.n_total, device=self.device) * self.v_threshold,
             "i_syn": torch.zeros(batch_size, self.n_total, device=self.device),
+            "i_nmda": torch.zeros(batch_size, self.n_total, device=self.device),
             "refrac": torch.zeros(batch_size, self.n_total, device=self.device),
         }
 
@@ -208,6 +224,7 @@ class SpikingBrainGPU(nn.Module):
         """
         v = state["v"]
         i_syn = state["i_syn"]
+        i_nmda = state["i_nmda"]
         refrac = state["refrac"]
 
         # Background Poisson drive
@@ -220,8 +237,8 @@ class SpikingBrainGPU(nn.Module):
         if external is not None:
             i_syn = i_syn + external
 
-        # Total input
-        i_total = i_syn
+        # Total input: fast AMPA + slow NMDA
+        i_total = i_syn + i_nmda
 
         # Membrane dynamics (only for non-refractory neurons)
         active = refrac <= 0
@@ -239,17 +256,19 @@ class SpikingBrainGPU(nn.Module):
         refrac = torch.clamp(refrac - self.dt, min=0)
 
         # Synaptic current from spikes (sparse matmul)
-        # W is [N, N], spikes is [batch, N] → need spikes as float for matmul
         spike_float = spikes.float()
-        # Sparse matmul: each spike propagates through W
-        # W[i,j] means neuron i projects to neuron j with weight W[i,j]
-        # synaptic_input[j] = sum_i W[i,j] * spike[i] = (W^T @ spike^T)^T
         syn_input = torch.sparse.mm(self.W.t(), spike_float.t()).t()
 
-        # Decay + new input
+        # Fast AMPA decay + new input
         i_syn = i_syn * np.exp(-self.dt / self.tau_syn) + syn_input
 
-        new_state = {"v": v, "i_syn": i_syn, "refrac": refrac}
+        # Slow NMDA: only for PFC neurons, from recurrent input
+        # NMDA accumulates the same synaptic input but decays much slower
+        if self.pfc_mask.any():
+            nmda_input = syn_input * self.pfc_mask.float().unsqueeze(0) * self.nmda_ratio
+            i_nmda = i_nmda * np.exp(-self.dt / self.tau_nmda) + nmda_input
+
+        new_state = {"v": v, "i_syn": i_syn, "i_nmda": i_nmda, "refrac": refrac}
         return new_state, spikes
 
     def simulate(
