@@ -1,12 +1,39 @@
-# Encephagen: Research Design Proposal v2
+# Encephagen: Research Design Proposal v3
+
+## 0. Philosophical Foundation
+
+This project is built on a set of core beliefs about how intelligence works:
+
+### Everything is signal
+What enters our eyes and ears are signals. The brain decomposes these signals and transforms them into understanding — like a Fourier transform, but learned, adaptive, and multi-scale. The brain is fundamentally a signal processor, and its structure determines HOW it processes.
+
+### Structure IS intelligence
+The Drosophila connectome experiment (Lappalainen et al., Nature 2024) proved that simulating brain structure alone — without any training — replicates the behavior of the living creature. This suggests that architecture is more important than training. Biology invests millions of years of evolution into structure; learning is just the last mile of calibration.
+
+### 先天 × 后天 — Innate × Learned
+Walking = innate CPG hardware × learned calibration. The genome gives you the POSSIBILITY of walking (spinal cord CPGs, stepping reflex). Experience turns that possibility into REALITY (balance calibration, muscle coordination). Like a phone that ships with an OS but still needs activation and updates. This framework applies to all cognitive abilities: the structure provides the scaffold, learning fills it with content.
+
+### The brain starts blank
+When a human is created, the brain is at its initial state — zero knowledge, zero experience. But even at init, the structure produces certain innate behaviors (reflexes, general movements, orienting). As the brain learns and evolves over time through experience, it picks up new skills. We should be able to monitor how the brain and body change over time by teaching it different skills.
+
+### Build first, understand later
+Deep neural networks worked before we understood why. The fruit fly connectome simulation produced behavior before anyone explained the mechanism. Making something work is more important than understanding why it works. The engineering mindset: get it running, then analyze.
+
+### The body is the test harness
+The focus is on the BRAIN itself — building a functional miniature human brain that can process information, learn, and adapt. The body is how we TEST whether the brain works. It's not an RL agent optimizing a reward function; it's a brain that happens to have a body for testing purposes.
+
+### Key finding so far
+Experiment 21 tested the core thesis: does human brain structure provide cognitive advantages over random wiring? The answer is nuanced — structure creates ORGANIZATION (significantly more differentiated regional activity, p=0.0002) but not COGNITIVE ADVANTAGE (no difference in learning, pattern recognition, or memory). This suggests that structure provides the scaffold, but the learning rule must be good enough to exploit it. With a crude learning rule, the scaffold doesn't help. With a better learning rule, it might.
+
+---
 
 ## 1. Title & Abstract
 
-**Title:** Encephagen — Building a Miniature Human Brain from Connectome Topology
+**Title:** Encephagen — A Functional Miniature Human Brain Simulation
 
 **Abstract:**
 
-Encephagen is an open-source project to build a functioning miniature human brain simulation. Starting from real structural connectivity data (Human Connectome Project), we incrementally build from the current 96-oscillator model toward a spiking neural network with learning, sensory input, motor output, and eventually a virtual body — following the same approach that produced behavior from the C. elegans (OpenWorm) and Drosophila (FlyWire) connectomes.
+Encephagen is an open-source project to build a functioning miniature human brain. Starting from real structural connectivity data (Human Connectome Project, 96 regions including subcortical), we build a 19,200 spiking neuron brain on GPU that can see, remember, learn from experience, and be interacted with in real-time. The project uses diffusion MRI tractography data (not synaptic-resolution connectomics) to constrain the network topology, and tests whether this macro-scale structure provides cognitive advantages over random wiring.
 
 Phase 1 (complete) demonstrated that the 96-region macro-connectome with identical Wilson-Cowan parameters produces emergent functional differentiation: a silencing hierarchy, degree-driven functional roles, and wiring-specific connectivity patterns. These findings extend Gollo et al. (2015) and Zamora-Lopez & Gilson (2025).
 
