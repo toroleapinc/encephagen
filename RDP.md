@@ -7,8 +7,8 @@ This project is built on a set of core beliefs about how intelligence works:
 ### Everything is signal
 What enters our eyes and ears are signals. The brain decomposes these signals and transforms them into understanding — like a Fourier transform, but learned, adaptive, and multi-scale. The brain is fundamentally a signal processor, and its structure determines HOW it processes.
 
-### Structure IS intelligence
-The Drosophila connectome experiment (Lappalainen et al., Nature 2024) proved that simulating brain structure alone — without any training — replicates the behavior of the living creature. This suggests that architecture is more important than training. Biology invests millions of years of evolution into structure; learning is just the last mile of calibration.
+### Structure constrains computation (not "IS intelligence")
+The Drosophila connectome experiment (Lappalainen et al., 2024) showed that synaptic-resolution structure (54M individually resolved synapses) can replicate specific sensory computations (motion detection) without training. However, this was at cellular resolution — 6 orders of magnitude finer than our dMRI tractography. At our macro-scale (96 regions), structure creates ORGANIZATION (regional differentiation, p=0.0002) and CHANNELING (concentrated signal flow through specific pathways), but does not provide universal cognitive advantages. The original "structure IS intelligence" framing was an overstatement of what our evidence supports.
 
 ### 先天 × 后天 — Innate × Learned
 Walking = innate CPG hardware × learned calibration. The genome gives you the POSSIBILITY of walking (spinal cord CPGs, stepping reflex). Experience turns that possibility into REALITY (balance calibration, muscle coordination). Like a phone that ships with an OS but still needs activation and updates. This framework applies to all cognitive abilities: the structure provides the scaffold, learning fills it with content.
@@ -22,8 +22,15 @@ Deep neural networks worked before we understood why. The fruit fly connectome s
 ### The body is the test harness
 The focus is on the BRAIN itself — building a functional miniature human brain that can process information, learn, and adapt. The body is how we TEST whether the brain works. It's not an RL agent optimizing a reward function; it's a brain that happens to have a body for testing purposes.
 
-### Key finding so far
-Experiment 21 tested the core thesis: does human brain structure provide cognitive advantages over random wiring? The answer is nuanced — structure creates ORGANIZATION (significantly more differentiated regional activity, p=0.0002) but not COGNITIVE ADVANTAGE (no difference in learning, pattern recognition, or memory). This suggests that structure provides the scaffold, but the learning rule must be good enough to exploit it. With a crude learning rule, the scaffold doesn't help. With a better learning rule, it might.
+### Key findings so far
+Experiments 21-24 tested the core thesis across 4 levels of biophysical realism:
+- **Exp 21 (Hebbian, no delays):** Structure creates organization (p=0.0002, survives FDR) but no cognitive advantage.
+- **Exp 22 (E-prop, no delays):** Structure helps conditioning (p=0.011, survives BH-FDR). The channeling vs distributing trade-off.
+- **Exp 24 (E-prop + delays + ALIF + neuron types):** ALIF adaptation reverses the advantage — concentrated thalamocortical volleys drive adaptation too high in the structured brain.
+
+The overall picture: structure provides organization and channeling, but the interaction between structure and neural mechanisms is non-obvious. Adding biophysical realism can reverse conclusions. At dMRI resolution, we cannot claim structure alone produces cognitive advantage — only that it shapes dynamics differently than random wiring.
+
+**Statistical note:** All multi-comparison tests use Benjamini-Hochberg FDR correction. The d=-9.0 entropy effect size (Exp 23) is an artifact of near-zero within-condition variance, not a meaningful biological effect.
 
 ---
 

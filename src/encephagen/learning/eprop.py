@@ -101,10 +101,18 @@ class EpropLearner:
         # Accumulator for continuous reward mode
         self.dW_accumulator = torch.zeros(self.nnz, device=self.device)
 
-    def surrogate_grad(self, v: torch.Tensor) -> torch.Tensor:
-        """Piecewise linear surrogate gradient."""
+    def surrogate_grad(self, v: torch.Tensor, v_thr: torch.Tensor | float | None = None) -> torch.Tensor:
+        """Piecewise linear surrogate gradient.
+
+        Args:
+            v: membrane potential [n_neurons]
+            v_thr: actual spike threshold (scalar or per-neuron). If None, uses base threshold.
+                   For ALIF, this should be v_threshold_base + beta * adaptation.
+        """
+        if v_thr is None:
+            v_thr = self.v_thr
         return self.p.gamma * torch.clamp(
-            1.0 - torch.abs(v - self.v_thr) / self.v_thr, min=0.0
+            1.0 - torch.abs(v - v_thr) / self.v_thr, min=0.0
         )
 
     def step(
@@ -129,8 +137,14 @@ class EpropLearner:
         alpha_norm = 1.0 - self.alpha
         self.z_bar = self.alpha * self.z_bar + alpha_norm * z_flat
 
-        # Surrogate gradient at postsynaptic neurons
-        psi = self.surrogate_grad(v_flat)
+        # Compute actual threshold (adaptive for ALIF)
+        if self.use_adaptation and adaptation is not None:
+            actual_thr = self.v_thr + self.beta * adaptation[0]
+        else:
+            actual_thr = None
+
+        # Surrogate gradient at postsynaptic neurons (using actual threshold)
+        psi = self.surrogate_grad(v_flat, actual_thr)
 
         # Basic eligibility: psi_j * z_bar_i
         psi_post = psi[self.post_idx]
