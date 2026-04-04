@@ -1,10 +1,14 @@
-"""GPU-accelerated spiking brain using PyTorch + SpikingJelly.
+"""GPU-accelerated spiking brain using PyTorch.
 
 Everything runs on the GPU as torch tensors. No Python loops over
 neurons or regions. Sparse connectivity stored as torch.sparse.
 
-This replaces the NumPy-based SpikingBrain for training speed.
-Target: 50-200x speedup over CPU NumPy implementation.
+Features (v2):
+  - Conduction delays from tract lengths (Euclidean distance / velocity)
+  - Region-specific neuron types (fast-spiking PV+, regular pyramidal, thalamic)
+  - ALIF adaptation for longer temporal credit assignment
+  - NMDA slow synapses in PFC for working memory
+  - E-prop learning integration
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn as nn
+from scipy.spatial.distance import squareform, pdist
 
 from encephagen.connectome.loader import Connectome
 from encephagen.learning.eprop import EpropLearner, EpropParams
@@ -31,17 +36,14 @@ class GPUBrainResult:
 
 
 class SpikingBrainGPU(nn.Module):
-    """Fully GPU-accelerated spiking brain.
-
-    All neurons are in a single flat tensor. Connectivity is a sparse
-    matrix on GPU. One matrix multiply per timestep replaces all the
-    Python loops.
+    """Fully GPU-accelerated spiking brain with biophysical diversity.
 
     Architecture:
       N_total neurons = n_regions × neurons_per_region
       Sparse weight matrix W [N_total, N_total] on GPU
-      Membrane potential V [batch, N_total] on GPU
-      Background Poisson drive via torch.poisson
+      Per-neuron membrane time constant (fast-spiking vs regular)
+      ALIF adaptation for temporal credit assignment
+      Conduction delays from inter-region distances
     """
 
     def __init__(
@@ -68,6 +70,13 @@ class SpikingBrainGPU(nn.Module):
         j_exc: float = 2.0,
         g_inh: float = 5.0,
         pfc_regions: list | None = None,
+        # New features
+        use_delays: bool = False,
+        conduction_velocity: float = 3.5,  # mm/ms
+        use_neuron_types: bool = False,
+        use_adaptation: bool = False,
+        tau_adapt: float = 200.0,     # Adaptation time constant (ms)
+        beta_adapt: float = 1.6,      # Adaptation strength (mV)
         device: str = "cuda",
     ):
         super().__init__()
@@ -81,13 +90,17 @@ class SpikingBrainGPU(nn.Module):
         self.neurons_per_region = neurons_per_region
         self.n_exc_per_region = int(neurons_per_region * exc_ratio)
         self.dt = dt
-        self.tau_m = tau_m
-        self.v_threshold = v_threshold
+        self.tau_m_default = tau_m
+        self.v_threshold_base = v_threshold
         self.v_reset = v_reset
         self.t_ref = t_ref
         self.tau_syn = tau_syn
         self.tau_nmda = tau_nmda
         self.nmda_ratio = nmda_ratio
+        self.use_delays = use_delays
+        self.use_adaptation = use_adaptation
+        self.tau_adapt = tau_adapt
+        self.beta_adapt = beta_adapt
         self.device = torch.device(device)
 
         # Scale j_exc by C_E
@@ -103,14 +116,21 @@ class SpikingBrainGPU(nn.Module):
         print(f"  GPU Brain: {n_total} neurons, {n_regions} regions")
         print(f"  j_eff={self.j_eff:.3f}mV, bg_rate={self.bg_rate_per_step:.4f}/step")
 
-        # Build connectivity matrix
+        # ---- Per-neuron membrane time constants (neuron type diversity) ----
+        tau_m_arr = torch.full((n_total,), tau_m)
+        if use_neuron_types and connectome is not None:
+            tau_m_arr = self._assign_neuron_types(
+                connectome, n_regions, neurons_per_region, exc_ratio, tau_m
+            )
+        self.register_buffer("tau_m", tau_m_arr)
+
+        # ---- Build connectivity matrix ----
         t0 = time.time()
         W = self._build_connectivity(
             connectome, n_regions, neurons_per_region,
             exc_ratio, internal_conn_prob, between_conn_prob,
             global_coupling,
         )
-        # Store as sparse tensor on GPU
         indices = torch.tensor(np.array(W.nonzero()), dtype=torch.long)
         values = torch.tensor(W[W.nonzero()].A1, dtype=torch.float32)
         self.register_buffer(
@@ -120,14 +140,23 @@ class SpikingBrainGPU(nn.Module):
         nnz = len(values)
         print(f"  Connectivity: {nnz:,} synapses ({elapsed:.1f}s)")
 
-        # Neuron type masks
+        # ---- Conduction delays ----
+        if use_delays and connectome is not None and connectome.positions is not None:
+            self._build_delay_buffer(
+                connectome, n_regions, neurons_per_region,
+                conduction_velocity, indices
+            )
+        else:
+            self.use_delays = False
+
+        # ---- Neuron type masks ----
         is_exc = torch.zeros(n_total, dtype=torch.bool)
         for r in range(n_regions):
             start = r * neurons_per_region
             is_exc[start:start + self.n_exc_per_region] = True
         self.register_buffer("is_exc", is_exc)
 
-        # Region boundaries for rate computation
+        # Region boundaries
         self.region_starts = [r * neurons_per_region for r in range(n_regions)]
         self.region_ends = [(r + 1) * neurons_per_region for r in range(n_regions)]
 
@@ -136,7 +165,7 @@ class SpikingBrainGPU(nn.Module):
         else:
             self.labels = [f"region_{i}" for i in range(n_regions)]
 
-        # PFC mask for NMDA-like slow synapses
+        # PFC mask for NMDA
         pfc_mask = torch.zeros(n_total, dtype=torch.bool)
         if pfc_regions is not None:
             for ri in pfc_regions:
@@ -146,17 +175,117 @@ class SpikingBrainGPU(nn.Module):
         if n_pfc > 0:
             print(f"  NMDA slow synapses: {n_pfc} PFC neurons (tau={tau_nmda}ms)")
 
+        # Adaptation
+        if use_adaptation:
+            print(f"  ALIF adaptation: tau={tau_adapt}ms, beta={beta_adapt}mV")
+
         # E-prop learner (initialized on demand)
         self.learner: EpropLearner | None = None
 
         # Move to device
         self.to(self.device)
 
+    def _assign_neuron_types(self, connectome, n_regions, npr, exc_ratio, default_tau):
+        """Assign per-neuron tau_m based on region type and E/I identity.
+
+        Neuron types:
+          - Cortical pyramidal (excitatory): tau_m = 20ms (default)
+          - Cortical fast-spiking PV+ (inhibitory): tau_m = 10ms
+          - Thalamic relay (excitatory): tau_m = 15ms
+          - Thalamic reticular (inhibitory): tau_m = 10ms
+          - Subcortical (basal ganglia, amygdala): tau_m = 25ms
+        """
+        tau_arr = torch.full((n_regions * npr,), default_tau)
+        n_exc = int(npr * exc_ratio)
+
+        # Classify regions
+        thalamic = set()
+        subcortical = set()
+        for i, label in enumerate(connectome.labels):
+            lu = label.upper()
+            if any(p in lu for p in ['TM', 'THAL']):
+                thalamic.add(i)
+            elif any(p in lu for p in ['BG', 'AMYG', 'HC', 'PHC', 'NAC', 'PUT', 'CAUD']):
+                subcortical.add(i)
+
+        n_thal = 0
+        n_sub = 0
+        n_fs = 0
+
+        for r in range(n_regions):
+            offset = r * npr
+            if r in thalamic:
+                # Thalamic relay (exc): faster
+                tau_arr[offset:offset + n_exc] = 15.0
+                # Thalamic reticular (inh): fast
+                tau_arr[offset + n_exc:offset + npr] = 10.0
+                n_thal += npr
+            elif r in subcortical:
+                # Subcortical: slower
+                tau_arr[offset:offset + npr] = 25.0
+                n_sub += npr
+            else:
+                # Cortical pyramidal (exc): default
+                tau_arr[offset:offset + n_exc] = default_tau
+                # Cortical PV+ fast-spiking (inh): fast
+                tau_arr[offset + n_exc:offset + npr] = 10.0
+                n_fs += (npr - n_exc)
+
+        print(f"  Neuron types: {n_thal} thalamic, {n_sub} subcortical, {n_fs} fast-spiking inh")
+        return tau_arr
+
+    def _build_delay_buffer(self, connectome, n_regions, npr, velocity, W_indices):
+        """Build conduction delay buffer for between-region synapses.
+
+        Delays are computed from Euclidean distances between region centroids.
+        Within-region delay = 0 (local circuits).
+        Between-region delay = distance / velocity, discretized to timesteps.
+        """
+        # Compute region-to-region distances
+        positions = connectome.positions
+        dists = squareform(pdist(positions))  # [n_regions, n_regions]
+
+        # Convert to delays in timesteps
+        delays_ms = dists / velocity
+        delays_steps = np.round(delays_ms / self.dt).astype(int)
+        max_delay = int(delays_steps.max())
+
+        # For each synapse, compute its delay
+        pre_neurons = W_indices[0].numpy()
+        post_neurons = W_indices[1].numpy()
+        pre_regions = pre_neurons // npr
+        post_regions = post_neurons // npr
+
+        # Per-synapse delays
+        syn_delays = np.zeros(len(pre_neurons), dtype=int)
+        for i in range(len(pre_neurons)):
+            r_pre = pre_regions[i]
+            r_post = post_regions[i]
+            if r_pre != r_post:
+                syn_delays[i] = delays_steps[r_pre, r_post]
+            # Within-region: delay = 0
+
+        self.register_buffer("syn_delays", torch.tensor(syn_delays, dtype=torch.long))
+        self.max_delay = max_delay
+
+        # Spike history buffer: [max_delay+1, batch=1, n_total]
+        # Circular buffer indexed by step % (max_delay + 1)
+        self.delay_buffer_size = max_delay + 1
+
+        # Store W indices for delay computation
+        self.register_buffer("W_pre_idx", torch.tensor(pre_neurons, dtype=torch.long))
+        self.register_buffer("W_post_idx", torch.tensor(post_neurons, dtype=torch.long))
+        self.register_buffer("W_values_raw", W_indices.clone())  # not needed, but keep indices
+
+        mean_delay = delays_ms[delays_ms > 0].mean()
+        n_delayed = int((syn_delays > 0).sum())
+        print(f"  Conduction delays: max={max_delay * self.dt:.1f}ms, "
+              f"mean={mean_delay:.1f}ms, {n_delayed:,} delayed synapses")
+
     def _build_connectivity(self, connectome, n_regions, npr, exc_ratio,
                             int_prob, bet_prob, g_coupling):
         """Build full sparse connectivity matrix [N, N]."""
         from scipy import sparse
-        import numpy as np
 
         N = n_regions * npr
         n_exc = int(npr * exc_ratio)
@@ -170,7 +299,7 @@ class SpikingBrainGPU(nn.Module):
             # Internal excitatory connections
             for i in range(n_exc):
                 targets = rng.random(npr) < int_prob
-                targets[i] = False  # No self-connection
+                targets[i] = False
                 for j in np.where(targets)[0]:
                     rows.append(offset + i)
                     cols.append(offset + j)
@@ -209,12 +338,25 @@ class SpikingBrainGPU(nn.Module):
 
     def init_state(self, batch_size: int = 1) -> dict:
         """Initialize neuron state."""
-        return {
-            "v": torch.rand(batch_size, self.n_total, device=self.device) * self.v_threshold,
+        state = {
+            "v": torch.rand(batch_size, self.n_total, device=self.device) * self.v_threshold_base,
             "i_syn": torch.zeros(batch_size, self.n_total, device=self.device),
             "i_nmda": torch.zeros(batch_size, self.n_total, device=self.device),
             "refrac": torch.zeros(batch_size, self.n_total, device=self.device),
+            "step_count": 0,
         }
+
+        # ALIF adaptation variable
+        if self.use_adaptation:
+            state["adaptation"] = torch.zeros(batch_size, self.n_total, device=self.device)
+
+        # Delay buffer
+        if self.use_delays:
+            state["spike_history"] = torch.zeros(
+                self.delay_buffer_size, self.n_total, device=self.device
+            )
+
+        return state
 
     def enable_learning(self, params: EpropParams | None = None) -> EpropLearner:
         """Enable e-prop learning on this brain's synapses."""
@@ -222,10 +364,13 @@ class SpikingBrainGPU(nn.Module):
             n_neurons=self.n_total,
             W_sparse=self.W,
             dt=self.dt,
-            v_threshold=self.v_threshold,
-            tau_m=self.tau_m,
+            v_threshold=self.v_threshold_base,
+            tau_m=self.tau_m_default,
             params=params,
             device=str(self.device),
+            use_adaptation=self.use_adaptation,
+            tau_adapt=self.tau_adapt,
+            beta_adapt=self.beta_adapt,
         )
         return self.learner
 
@@ -244,7 +389,7 @@ class SpikingBrainGPU(nn.Module):
         """One simulation timestep — fully on GPU.
 
         Args:
-            state: dict with 'v', 'i_syn', 'refrac' tensors.
+            state: dict with neuron state tensors.
             external: [batch, n_total] external input in mV. Optional.
 
         Returns:
@@ -254,6 +399,7 @@ class SpikingBrainGPU(nn.Module):
         i_syn = state["i_syn"]
         i_nmda = state["i_nmda"]
         refrac = state["refrac"]
+        step_count = state["step_count"]
 
         # Background Poisson drive
         bg_spikes = torch.poisson(
@@ -268,39 +414,85 @@ class SpikingBrainGPU(nn.Module):
         # Total input: fast AMPA + slow NMDA
         i_total = i_syn + i_nmda
 
-        # Membrane dynamics (only for non-refractory neurons)
+        # Membrane dynamics with per-neuron tau_m
         active = refrac <= 0
-        dv = (-v + i_total) / self.tau_m
+        dv = (-v + i_total) / self.tau_m.unsqueeze(0)
         v = v + self.dt * dv * active.float()
 
+        # Adaptive threshold (ALIF)
+        if self.use_adaptation:
+            adaptation = state["adaptation"]
+            v_thr = self.v_threshold_base + self.beta_adapt * adaptation
+        else:
+            v_thr = self.v_threshold_base
+
         # Spike detection
-        spikes = (v >= self.v_threshold) & active
+        spikes = (v >= v_thr) & active
 
         # Update eligibility traces BEFORE reset (need pre-spike voltage)
         if self.learner is not None:
-            self.learner.step(v, spikes)
+            self.learner.step(v, spikes, adaptation if self.use_adaptation else None)
 
-        # Reset spiking neurons
-        v = torch.where(spikes, torch.tensor(self.v_reset, device=self.device), v)
+        # Reset spiking neurons (soft reset: subtract threshold)
+        if self.use_adaptation:
+            v = torch.where(spikes, v - v_thr, v)
+            # Update adaptation: increment on spike, decay otherwise
+            rho = np.exp(-self.dt / self.tau_adapt)
+            adaptation = rho * adaptation + spikes.float()
+        else:
+            v = torch.where(spikes, torch.tensor(self.v_reset, device=self.device), v)
+
         refrac = torch.where(spikes, torch.tensor(self.t_ref, device=self.device), refrac)
-
-        # Decrement refractory
         refrac = torch.clamp(refrac - self.dt, min=0)
 
-        # Synaptic current from spikes (sparse matmul)
+        # Synaptic current from spikes
         spike_float = spikes.float()
-        syn_input = torch.sparse.mm(self.W.t(), spike_float.t()).t()
+
+        if self.use_delays:
+            # Store current spikes in history buffer
+            buf_idx = step_count % self.delay_buffer_size
+            state["spike_history"][buf_idx] = spike_float[0]
+
+            # For each synapse, look up the spike from (step - delay) ago
+            # Gather delayed spikes per synapse
+            W_coalesced = self.W.coalesce()
+            W_indices = W_coalesced.indices()
+            W_vals = W_coalesced.values()
+            pre_idx = W_indices[0]  # [nnz] source neurons
+            post_idx = W_indices[1]  # [nnz] target neurons
+
+            # Compute buffer index for each synapse's delay
+            delayed_buf_idx = (step_count - self.syn_delays) % self.delay_buffer_size
+            # Clamp to valid range (before enough history exists)
+            delayed_buf_idx = torch.clamp(delayed_buf_idx, min=0)
+
+            # Gather delayed presynaptic spikes
+            delayed_spikes = state["spike_history"][delayed_buf_idx, pre_idx]
+
+            # Compute synaptic input: sum of W * delayed_spike for each postsynaptic neuron
+            syn_input = torch.zeros(1, self.n_total, device=self.device)
+            weighted_spikes = W_vals * delayed_spikes
+            syn_input[0].scatter_add_(0, post_idx, weighted_spikes)
+        else:
+            syn_input = torch.sparse.mm(self.W.t(), spike_float.t()).t()
 
         # Fast AMPA decay + new input
         i_syn = i_syn * np.exp(-self.dt / self.tau_syn) + syn_input
 
-        # Slow NMDA: only for PFC neurons, from recurrent input
-        # NMDA accumulates the same synaptic input but decays much slower
+        # Slow NMDA: only for PFC neurons
         if self.pfc_mask.any():
             nmda_input = syn_input * self.pfc_mask.float().unsqueeze(0) * self.nmda_ratio
             i_nmda = i_nmda * np.exp(-self.dt / self.tau_nmda) + nmda_input
 
-        new_state = {"v": v, "i_syn": i_syn, "i_nmda": i_nmda, "refrac": refrac}
+        new_state = {
+            "v": v, "i_syn": i_syn, "i_nmda": i_nmda,
+            "refrac": refrac, "step_count": step_count + 1,
+        }
+        if self.use_adaptation:
+            new_state["adaptation"] = adaptation
+        if self.use_delays:
+            new_state["spike_history"] = state["spike_history"]
+
         return new_state, spikes
 
     def simulate(
@@ -310,20 +502,9 @@ class SpikingBrainGPU(nn.Module):
         record_every: int = 100,
         external: torch.Tensor | None = None,
     ) -> GPUBrainResult:
-        """Run simulation on GPU.
-
-        Args:
-            duration_ms: Total simulation time.
-            transient_ms: Discard initial transient.
-            record_every: Record region rates every N steps.
-            external: Static external input [1, n_total].
-
-        Returns:
-            GPUBrainResult with firing rates.
-        """
+        """Run simulation on GPU."""
         total_steps = int(duration_ms / self.dt)
         transient_steps = int(transient_ms / self.dt)
-        record_steps = (total_steps - transient_steps) // record_every
 
         region_rates = []
         state = self.init_state(batch_size=1)
@@ -333,15 +514,14 @@ class SpikingBrainGPU(nn.Module):
         acc_count = 0
 
         with torch.no_grad():
-            for step in range(total_steps):
+            for step_i in range(total_steps):
                 state, spikes = self.step(state, external)
 
-                if step >= transient_steps:
+                if step_i >= transient_steps:
                     spike_acc += spikes.float()
                     acc_count += 1
 
                     if acc_count >= record_every:
-                        # Compute per-region rates
                         rates = []
                         for r in range(self.n_regions):
                             s = self.region_starts[r]
@@ -353,8 +533,8 @@ class SpikingBrainGPU(nn.Module):
                         spike_acc.zero_()
                         acc_count = 0
 
-                if step > 0 and step % (total_steps // 5) == 0:
-                    pct = step / total_steps * 100
+                if step_i > 0 and step_i % (total_steps // 5) == 0:
+                    pct = step_i / total_steps * 100
                     print(f"  {pct:.0f}%", end=" ", flush=True)
 
         elapsed = time.time() - t0
