@@ -168,9 +168,9 @@ def run_experiment():
     # Log-transform SC for correlation (standard in literature)
     sc_log = np.log1p(sc)
 
-    N_RUNS = 5
+    N_RUNS = 3
     device = "cuda"
-    duration_ms = 30000  # 30 seconds of simulation
+    duration_ms = 10000  # 10 seconds (100K steps — ~7 min per run)
 
     results = {"connectome": [], "random": []}
     t0 = time.time()
