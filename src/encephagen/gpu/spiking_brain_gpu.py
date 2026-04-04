@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 
 from encephagen.connectome.loader import Connectome
+from encephagen.learning.eprop import EpropLearner, EpropParams
 
 
 @dataclass
@@ -145,6 +146,9 @@ class SpikingBrainGPU(nn.Module):
         if n_pfc > 0:
             print(f"  NMDA slow synapses: {n_pfc} PFC neurons (tau={tau_nmda}ms)")
 
+        # E-prop learner (initialized on demand)
+        self.learner: EpropLearner | None = None
+
         # Move to device
         self.to(self.device)
 
@@ -212,6 +216,30 @@ class SpikingBrainGPU(nn.Module):
             "refrac": torch.zeros(batch_size, self.n_total, device=self.device),
         }
 
+    def enable_learning(self, params: EpropParams | None = None) -> EpropLearner:
+        """Enable e-prop learning on this brain's synapses."""
+        self.learner = EpropLearner(
+            n_neurons=self.n_total,
+            W_sparse=self.W,
+            dt=self.dt,
+            v_threshold=self.v_threshold,
+            tau_m=self.tau_m,
+            params=params,
+            device=str(self.device),
+        )
+        return self.learner
+
+    def apply_reward(self, spikes: torch.Tensor, reward: float) -> None:
+        """Apply reward-modulated e-prop weight update."""
+        if self.learner is None:
+            return
+        W_vals = self.W.coalesce().values()
+        new_vals = self.learner.apply_reward(spikes, reward, W_vals)
+        indices = self.W.coalesce().indices()
+        self.W = torch.sparse_coo_tensor(
+            indices, new_vals, self.W.shape
+        ).coalesce()
+
     def step(self, state: dict, external: torch.Tensor | None = None) -> tuple[dict, torch.Tensor]:
         """One simulation timestep — fully on GPU.
 
@@ -247,6 +275,10 @@ class SpikingBrainGPU(nn.Module):
 
         # Spike detection
         spikes = (v >= self.v_threshold) & active
+
+        # Update eligibility traces BEFORE reset (need pre-spike voltage)
+        if self.learner is not None:
+            self.learner.step(v, spikes)
 
         # Reset spiking neurons
         v = torch.where(spikes, torch.tensor(self.v_reset, device=self.device), v)

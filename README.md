@@ -21,6 +21,7 @@ brain> status          → see all 12 brain regions firing in real-time
 | Function | Status | How |
 |---|---|---|
 | **See** | 56% accuracy at 5 patterns (2.8x chance) | Visual cortex processes input, distinct responses per pattern |
+| **Learn (e-prop)** | Connectome outperforms random on conditioning (p=0.011) | Eligibility traces + surrogate gradient + reward modulation |
 | **Remember** | 75% PFC persistence after stimulus removal | NMDA slow synapses (tau=150ms) sustain prefrontal activity |
 | **Learn** | Classical conditioning, stimulus-specific | Three-factor STDP: pre x post x reward strengthens pathways |
 | **Predict** | Trained stimuli trigger stronger responses | Learned associations persist, novel stimuli produce weaker response |
@@ -71,7 +72,7 @@ python experiments/18_integrated_cognition.py # All together
 
 **Connectivity:** Real structural connectivity from the Human Connectome Project (diffusion MRI tractography, 96 regions). Between-region connections follow actual white matter fiber pathways.
 
-**Learning:** Three-factor STDP — synapses strengthen when presynaptic activity, postsynaptic activity, and a reward signal are all present. Biologically plausible (Izhikevich 2007), produces classical conditioning.
+**Learning:** E-prop (Bellec et al. 2020) — eligibility traces per synapse track causal influence of weight on spiking via surrogate gradient. Reward modulates snapshotted eligibility for temporal credit assignment. Also supports simpler three-factor Hebbian for comparison.
 
 **Working Memory:** NMDA-like slow synaptic dynamics in prefrontal cortex create persistent activity after stimulus removal (Compte et al. 2000, Wang 2001).
 
@@ -91,6 +92,9 @@ python experiments/18_integrated_cognition.py # All together
 | **16** | **Pattern recognition** | **56% accuracy at 5 classes (chance=20%)** |
 | **17** | **Working memory** | **75% PFC persistence with NMDA synapses** |
 | **18** | **Integrated cognition** | **See + remember + learn + predict — all working** |
+| 19-20 | Walker2d body control | Brain keeps unstable body upright 1.4s (vs 1.0s zero) |
+| 21 | Connectome vs random (Hebbian) | Structure creates organization (p=0.0002) but not cognitive advantage |
+| **22** | **Connectome vs random (e-prop)** | **Structure helps conditioning (p=0.011) — e-prop reveals advantage Hebbian missed** |
 
 ## Relation to Prior Work
 
