@@ -237,13 +237,16 @@ class SpikingBrainGPU(nn.Module):
     def _build_delay_buffer(self, connectome, n_regions, npr, velocity, W_indices):
         """Build conduction delay buffer for between-region synapses.
 
-        Delays are computed from Euclidean distances between region centroids.
-        Within-region delay = 0 (local circuits).
-        Between-region delay = distance / velocity, discretized to timesteps.
+        Uses tract lengths if available (from dMRI tractography), otherwise
+        falls back to Euclidean distances from region centroids.
         """
-        # Compute region-to-region distances
-        positions = connectome.positions
-        dists = squareform(pdist(positions))  # [n_regions, n_regions]
+        if connectome.tract_lengths is not None:
+            # Use actual tract lengths (more accurate than Euclidean)
+            dists = connectome.tract_lengths
+            print(f"  Using tract lengths for delays (not Euclidean)")
+        else:
+            positions = connectome.positions
+            dists = squareform(pdist(positions))
 
         # Convert to delays in timesteps
         delays_ms = dists / velocity
@@ -284,7 +287,14 @@ class SpikingBrainGPU(nn.Module):
 
     def _build_connectivity(self, connectome, n_regions, npr, exc_ratio,
                             int_prob, bet_prob, g_coupling):
-        """Build full sparse connectivity matrix [N, N]."""
+        """Build full sparse connectivity matrix [N, N].
+
+        Key design: the connectome IS the dominant signal, not a minor modulator.
+        - Internal connectivity is sparse (3-10%) to avoid drowning out structure
+        - Between-region weights are set DIRECTLY by connectome weights (normalized)
+        - Between-region probability scales with connectome weight
+        - This matches the fly/worm approach: connectome drives connectivity
+        """
         from scipy import sparse
 
         N = n_regions * npr
@@ -315,21 +325,36 @@ class SpikingBrainGPU(nn.Module):
 
         # Between-region connections (excitatory only)
         if connectome is not None:
+            # Normalize weights for high-dynamic-range connectomes
+            all_weights = np.array([w for _, _, w in connectome.edges() if w > 0])
+            dyn_range = all_weights.max() / all_weights.min() if len(all_weights) > 0 else 1.0
+            if dyn_range > 100:
+                # Log-transform for continuous weights (tvb66)
+                use_log = True
+                log_max = np.log1p(all_weights.max() * 1000)
+            else:
+                use_log = False
+
             for src, dst, w in connectome.edges():
                 if src == dst:
                     continue
                 src_off = src * npr
                 dst_off = dst * npr
-                eff_prob = min(1.0, bet_prob * w * g_coupling)
+                if use_log:
+                    w_eff = np.log1p(w * 1000) / log_max  # [0, 1]
+                else:
+                    w_eff = w
+                eff_prob = min(1.0, bet_prob * w_eff * g_coupling)
                 if eff_prob < 1e-6:
                     continue
+                syn_weight = self.j_eff * w_eff * g_coupling
                 n_exc_src = int(npr * exc_ratio)
                 for i in range(n_exc_src):
                     targets = rng.random(npr) < eff_prob
                     for j in np.where(targets)[0]:
                         rows.append(src_off + i)
                         cols.append(dst_off + j)
-                        vals.append(self.j_eff * w * g_coupling)
+                        vals.append(syn_weight)
 
         W = sparse.csr_matrix(
             (vals, (rows, cols)), shape=(N, N), dtype=np.float32,

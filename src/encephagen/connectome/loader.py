@@ -22,6 +22,7 @@ class Connectome:
         labels: list[str],
         positions: np.ndarray | None = None,
         region_types: dict[str, str] | None = None,
+        tract_lengths: np.ndarray | None = None,
     ):
         if weights.ndim != 2 or weights.shape[0] != weights.shape[1]:
             raise ValueError(
@@ -45,6 +46,7 @@ class Connectome:
         self.labels = list(labels)
         self.positions = positions
         self.region_types = region_types or {}
+        self.tract_lengths = tract_lengths
 
     @classmethod
     def from_bundled(cls, name: str = "toy20") -> Connectome:
@@ -54,11 +56,15 @@ class Connectome:
         weights_path = _BUNDLED_DIR / f"{name}_weights.npy"
         labels_path = _BUNDLED_DIR / f"{name}_labels.json"
         positions_path = _BUNDLED_DIR / f"{name}_positions.npy"
-        return cls.from_files(
+        tract_lengths_path = _BUNDLED_DIR / f"{name}_tract_lengths.npy"
+        conn = cls.from_files(
             str(weights_path),
             str(labels_path),
             str(positions_path) if positions_path.exists() else None,
         )
+        if tract_lengths_path.exists():
+            conn.tract_lengths = np.load(str(tract_lengths_path))
+        return conn
 
     @classmethod
     def from_files(
