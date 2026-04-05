@@ -74,6 +74,7 @@ class SpikingBrainGPU(nn.Module):
         use_delays: bool = False,
         conduction_velocity: float = 3.5,  # mm/ms
         use_neuron_types: bool = False,
+        use_t1t2_gradient: bool = False,   # T1w/T2w timescale gradient
         use_adaptation: bool = False,
         tau_adapt: float = 200.0,     # Adaptation time constant (ms)
         beta_adapt: float = 1.6,      # Adaptation strength (mV)
@@ -121,9 +122,11 @@ class SpikingBrainGPU(nn.Module):
         print(f"  GPU Brain: {n_total} neurons, {n_regions} regions")
         print(f"  j_eff={self.j_eff:.3f}mV, bg_rate={self.bg_rate_per_step:.4f}/step")
 
-        # ---- Per-neuron membrane time constants (neuron type diversity) ----
+        # ---- Per-neuron membrane time constants ----
         tau_m_arr = torch.full((n_total,), tau_m)
-        if use_neuron_types and connectome is not None:
+        if use_t1t2_gradient:
+            tau_m_arr = self._assign_t1t2_gradient(n_regions, neurons_per_region)
+        elif use_neuron_types and connectome is not None:
             tau_m_arr = self._assign_neuron_types(
                 connectome, n_regions, neurons_per_region, exc_ratio, tau_m
             )
@@ -189,6 +192,30 @@ class SpikingBrainGPU(nn.Module):
 
         # Move to device
         self.to(self.device)
+
+    def _assign_t1t2_gradient(self, n_regions, npr):
+        """Assign per-region tau_m from T1w/T2w myelination gradient.
+
+        Higher T1w/T2w = more myelinated = faster processing = shorter tau_m.
+        Sensory cortex: ~10ms. Prefrontal: ~30ms. From HCP S1200 data.
+        """
+        from pathlib import Path
+        bundled = Path(__file__).parent.parent / "connectome" / "bundled"
+        tau_file = bundled / "neurolib80_tau_m.npy"
+
+        if tau_file.exists() and n_regions == 80:
+            region_tau = np.load(str(tau_file))
+        else:
+            # Fallback: linear gradient from sensory (10ms) to frontal (30ms)
+            region_tau = np.linspace(10.0, 30.0, n_regions)
+
+        tau_arr = torch.zeros(n_regions * npr)
+        for r in range(n_regions):
+            tau_arr[r * npr:(r + 1) * npr] = float(region_tau[r])
+
+        print(f"  T1w/T2w gradient: tau_m range {region_tau.min():.1f}-{region_tau.max():.1f}ms "
+              f"(sensory fast, frontal slow)")
+        return tau_arr
 
     def _assign_neuron_types(self, connectome, n_regions, npr, exc_ratio, default_tau):
         """Assign per-neuron tau_m based on region type and E/I identity.
