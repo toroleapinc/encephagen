@@ -108,6 +108,11 @@ class SpikingBrainGPU(nn.Module):
         self.j_eff = j_exc * (16.0 / c_e)
         self.j_inh = self.j_eff * g_inh
 
+        # Long-range synapse boost: each between-region synapse is equivalent
+        # to multiple local synapses (mimics convergent axonal branching in real brain).
+        # In cortex, a long-range axon makes 5-10 boutons per target neuron.
+        self.long_range_boost = global_coupling
+
         # Background rate (Brunel calibration)
         c_ext = c_e
         nu_thr = v_threshold / (self.j_eff * c_ext * tau_m)
@@ -323,38 +328,82 @@ class SpikingBrainGPU(nn.Module):
                     cols.append(offset + j)
                     vals.append(-self.j_inh)
 
-        # Between-region connections (excitatory only)
+        # Between-region connections: CONNECTOME-DOMINANT
+        # The connectome IS the network. Long-range synapses are boosted
+        # to be the primary driver of dynamics (like fly/worm models).
         if connectome is not None:
-            # Normalize weights for high-dynamic-range connectomes
             all_weights = np.array([w for _, _, w in connectome.edges() if w > 0])
-            dyn_range = all_weights.max() / all_weights.min() if len(all_weights) > 0 else 1.0
-            if dyn_range > 100:
-                # Log-transform for continuous weights (tvb66)
-                use_log = True
-                log_max = np.log1p(all_weights.max() * 1000)
+            if len(all_weights) == 0:
+                pass
             else:
-                use_log = False
-
-            for src, dst, w in connectome.edges():
-                if src == dst:
-                    continue
-                src_off = src * npr
-                dst_off = dst * npr
-                if use_log:
-                    w_eff = np.log1p(w * 1000) / log_max  # [0, 1]
+                # Normalize weights to [0, 1]
+                dyn_range = all_weights.max() / all_weights.min()
+                if dyn_range > 100:
+                    # Log-transform for continuous weights (tvb66: 14249x range)
+                    norm_w = np.log1p(all_weights * 1000)
+                    w_norm_max = norm_w.max()
+                    use_log = True
                 else:
-                    w_eff = w
-                eff_prob = min(1.0, bet_prob * w_eff * g_coupling)
-                if eff_prob < 1e-6:
-                    continue
-                syn_weight = self.j_eff * w_eff * g_coupling
+                    # Direct normalize for quantized weights (tvb96: 3x range)
+                    w_norm_max = all_weights.max()
+                    use_log = False
+
+                # Identify inhibitory long-range pathways from known neuroanatomy
+                # BG Pallidum (GPi/SNr) → Thalamus is GABAergic
+                # Striatum (Caudate, Putamen) → Pallidum is GABAergic
+                labels = connectome.labels
+                inh_pairs = set()  # (src_region, dst_region) tuples for inhibitory paths
+                for i, li in enumerate(labels):
+                    for j, lj in enumerate(labels):
+                        li_u, lj_u = li.upper(), lj.upper()
+                        # Pallidum → Thalamus (GABAergic)
+                        if 'BG-PA' in li_u and 'TM-' in lj_u:
+                            inh_pairs.add((i, j))
+                        # Striatum → Pallidum (GABAergic)
+                        if ('BG-CD' in li_u or 'BG-PU' in li_u) and 'BG-PA' in lj_u:
+                            inh_pairs.add((i, j))
+
                 n_exc_src = int(npr * exc_ratio)
-                for i in range(n_exc_src):
-                    targets = rng.random(npr) < eff_prob
-                    for j in np.where(targets)[0]:
-                        rows.append(src_off + i)
-                        cols.append(dst_off + j)
-                        vals.append(syn_weight)
+                n_long_exc = 0
+                n_long_inh = 0
+
+                for src, dst, w in connectome.edges():
+                    if src == dst:
+                        continue
+                    src_off = src * npr
+                    dst_off = dst * npr
+
+                    if use_log:
+                        w_norm = np.log1p(w * 1000) / w_norm_max
+                    else:
+                        w_norm = w / w_norm_max
+
+                    eff_prob = min(1.0, bet_prob * w_norm)
+                    if eff_prob < 1e-6:
+                        continue
+
+                    # Determine sign from neuroanatomy
+                    is_inhibitory = (src, dst) in inh_pairs
+                    if is_inhibitory:
+                        syn_weight = -self.j_inh * self.long_range_boost * w_norm
+                    else:
+                        syn_weight = self.j_eff * self.long_range_boost * w_norm
+
+                    for i in range(n_exc_src):
+                        targets = rng.random(npr) < eff_prob
+                        for j in np.where(targets)[0]:
+                            rows.append(src_off + i)
+                            cols.append(dst_off + j)
+                            vals.append(syn_weight)
+                            if is_inhibitory:
+                                n_long_inh += 1
+                            else:
+                                n_long_exc += 1
+
+                n_long = n_long_exc + n_long_inh
+                n_local = len(vals) - n_long
+                ratio = n_long / max(1, len(vals)) * 100
+                print(f"  Long-range: {n_long:,} ({ratio:.1f}%) — {n_long_exc:,} exc, {n_long_inh:,} inh")
 
         W = sparse.csr_matrix(
             (vals, (rows, cols)), shape=(N, N), dtype=np.float32,
