@@ -94,35 +94,17 @@ We compared connectome vs random on cognitive PERFORMANCE. But the fly model sho
 
 ## 4. The Path Forward (Realistic with RTX 5070)
 
-### Phase A: Regional Heterogeneity (1-2 days)
-Add the Murray/Chaudhuri timescale gradient:
-- Download T1w/T2w ratio data from HCP (freely available)
-- Map T1w/T2w → tau_m per region: sensory fast, frontal slow
-- Map cortical thickness → neurons per region (proportional)
-- Re-validate SC-FC, re-run connectome vs random
+### Phase A: Regional Heterogeneity — DONE
+T1w/T2w gradient implemented. Hierarchy emerges (r=-0.45, p<0.0001) but is identical for connectome and random. The gradient drives hierarchy, not topology.
 
-This is the MINIMUM change that the literature says is NECESSARY for structure to matter. If this doesn't work, the macro-scale approach is fundamentally limited.
+### Phase B: Innate Dynamics — DONE (hit wall)
+Stimulus doesn't propagate beyond visual cortex. Root cause: all dMRI long-range connections are excitatory. Added feedforward inhibition (FC-FC improved to 0.30+) but stimulus cascade still blocked. **This is the fundamental dMRI wall.**
 
-### Phase B: Specific Innate Dynamics (1 week)
-Test whether the connectome produces human-specific dynamics:
-- Resting-state oscillations (compare power spectrum vs empirical EEG)
-- Stimulus propagation hierarchy (visual → temporal → frontal → motor)
-- Default mode network emergence
-- Compare ALL of these between connectome and random
+### Phase C: Learning Scaffold — DONE (inconclusive)
+Neither connectome nor random learns 3-way stimulus-action task (both at ~36%, chance=33%). E-prop doesn't produce meaningful learning at this scale. Can't compare learning speed when neither learns.
 
-### Phase C: Learning Architecture Advantage (1-2 weeks)
-The BT-SNN approach applied to human connectome:
-- Use the connectome as the architecture of a spiking RL agent
-- Train on cognitive tasks (delayed match-to-sample, sequence learning)
-- Compare LEARNING SPEED between connectome-structured and random-structured
-- If connectome learns faster, structure provides a SCAFFOLDING advantage
-
-### Phase D: Structured Cortical Microcircuits (2-4 weeks)
-Replace random within-region connectivity with minimal cortical circuits:
-- Input layer (receives between-region input)
-- Processing layer (local recurrence)
-- Output layer (sends to other regions)
-- Different I/O patterns for cortical vs thalamic vs subcortical regions
+### Phase D: Interactive Demo — DONE
+`python demo.py` — 16K neurons, 80 regions, T1w/T2w gradient, delays, CPG walking, stimulus response. The brain is alive but structure doesn't differentiate from random.
 
 ### VRAM Budget
 All of the above fits in 12GB:
@@ -165,10 +147,20 @@ All within RTX 5070 (12GB VRAM, 16GB system RAM).
 | Milestone | Criterion | Status |
 |-----------|-----------|--------|
 | SC-FC validation | FC-FC(emp) > 0.3 | **DONE** (r=0.42) |
-| Regional heterogeneity | Timescale hierarchy matches Murray 2014 | Not started |
-| Innate dynamics | Alpha rhythm emerges from topology | Not started |
-| Learning advantage | Connectome learns 2x faster than random | Not started |
-| Working memory | PFC persistence > 50% with regional tau_m gradient | Not started |
+| Regional heterogeneity | Timescale hierarchy matches Murray 2014 | **DONE** (r=-0.45) |
+| Innate dynamics | Stimulus propagation through connectome | **BLOCKED** (dMRI wall) |
+| Learning advantage | Connectome learns faster than random | **INCONCLUSIVE** (neither learns) |
+| Working memory | PFC persistence with tau_m gradient | Not tested with gradient |
+| Interactive demo | Brain responds to stimuli, drives body | **DONE** (demo.py) |
+
+### The dMRI wall
+dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.
+
+### Paths through the wall
+1. **Estimated inhibitory long-range** — from neuroanatomy literature (~30% inhibitory)
+2. **Multi-scale** — Wilson-Cowan regionally + spiking locally (Arbor-TVB)
+3. **BT-SNN approach** — connectome as RL architecture (Zhao et al. 2024 showed this works)
+4. **Developmental** — start noisy, let learning refine toward real connectome
 
 ---
 
