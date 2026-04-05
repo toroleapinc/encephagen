@@ -100,7 +100,11 @@ python experiments/18_integrated_cognition.py # All together
 | 25 | SC-FC validation | FAILS at gc=0.15 (r=0.074, benchmark 0.3-0.5) |
 | 26 | SC-FC parameter tuning | gc=0.20 erf=3.5 → r=0.388 PASSES benchmark |
 | **27** | **Validated connectome vs random** | **Structure helps organization (p<0.0001) but HURTS cognition — FDR corrected** |
-| 28 | tvb66 tuning | WIP: continuous weights (14,249x dynamic range) |
+| 28 | tvb66 tuning | Continuous weights, log-transform connectivity |
+| **29** | **Neurolib80 validated test** | **0/4 significant — no structural advantage on validated dynamics (FC-FC=0.42)** |
+| 30 | Innate dynamics | Stimulus trapped in visual cortex — dMRI all-excitatory wall |
+| 31 | Learning scaffold | Neither brain learns (both at chance) |
+| **32** | **Newborn closed-loop** | **Brain→CPG→Body loop working, but body too stable to differentiate** |
 
 ## Relation to Prior Work
 

@@ -106,6 +106,9 @@ Neither connectome nor random learns 3-way stimulus-action task (both at ~36%, c
 ### Phase D: Interactive Demo — DONE
 `python demo.py` — 16K neurons, 80 regions, T1w/T2w gradient, delays, CPG walking, stimulus response. The brain is alive but structure doesn't differentiate from random.
 
+### Experiment 32: Newborn Closed-Loop — DONE (body too stable)
+Brain→CPG→Body→Brain loop with inverted pendulum. Both connectome and random survive full 10s with identical metrics. The pendulum self-stabilizes — need properly unstable body (MuJoCo Walker2d) where brain must actively balance.
+
 ### VRAM Budget
 All of the above fits in 12GB:
 - 80 regions × 200 neurons = 16,000 neurons
@@ -157,10 +160,10 @@ All within RTX 5070 (12GB VRAM, 16GB system RAM).
 dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.
 
 ### Paths through the wall
-1. **Estimated inhibitory long-range** — from neuroanatomy literature (~30% inhibitory)
-2. **Multi-scale** — Wilson-Cowan regionally + spiking locally (Arbor-TVB)
-3. **BT-SNN approach** — connectome as RL architecture (Zhao et al. 2024 showed this works)
-4. **Developmental** — start noisy, let learning refine toward real connectome
+1. **MuJoCo Walker2d + BT-SNN approach** — Wire heterogeneous brain to properly unstable body. Test if connectome architecture learns motor control faster than random. Has positive evidence from mouse (Zhao et al. 2024). Most likely to succeed.
+2. **Estimated inhibitory long-range** — from neuroanatomy literature (~30% inhibitory). Fixes the all-excitatory problem but needs subcortical parcellation.
+3. **Multi-scale** — Wilson-Cowan regionally + spiking locally (Arbor-TVB). The regional model WORKS for propagation.
+4. **Developmental** — start noisy, let learning refine toward real connectome. Most elegant 先天 × 后天 test.
 
 ---
 
