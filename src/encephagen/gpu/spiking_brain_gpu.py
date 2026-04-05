@@ -421,7 +421,15 @@ class SpikingBrainGPU(nn.Module):
                         for j in np.where(targets)[0]:
                             rows.append(src_off + i)
                             cols.append(dst_off + j)
-                            vals.append(syn_weight)
+                            # Feedforward inhibition: long-range excitation onto
+                            # local inhibitory neurons is 3x STRONGER than onto
+                            # excitatory neurons. This creates the E-I sequence
+                            # that prevents runaway excitation (Isaacson & Scanziani 2011).
+                            if j >= n_exc_src and not is_inhibitory:
+                                # Target is inhibitory → stronger connection
+                                vals.append(syn_weight * 3.0)
+                            else:
+                                vals.append(syn_weight)
                             if is_inhibitory:
                                 n_long_inh += 1
                             else:
