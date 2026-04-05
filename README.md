@@ -94,7 +94,13 @@ python experiments/18_integrated_cognition.py # All together
 | **18** | **Integrated cognition** | **See + remember + learn + predict — all working** |
 | 19-20 | Walker2d body control | Brain keeps unstable body upright 1.4s (vs 1.0s zero) |
 | 21 | Connectome vs random (Hebbian) | Structure creates organization (p=0.0002) but not cognitive advantage |
-| **22** | **Connectome vs random (e-prop)** | **Structure helps conditioning (p=0.011) — e-prop reveals advantage Hebbian missed** |
+| 22 | Connectome vs random (e-prop) | Conditioning advantage (p=0.011) — but parameter-dependent (see Exp 27) |
+| 23 | Discrimination analysis | Connectome channels (consistency), random distributes (entropy) |
+| 24 | Full biophysical model | ALIF adaptation reverses connectome advantage |
+| 25 | SC-FC validation | FAILS at gc=0.15 (r=0.074, benchmark 0.3-0.5) |
+| 26 | SC-FC parameter tuning | gc=0.20 erf=3.5 → r=0.388 PASSES benchmark |
+| **27** | **Validated connectome vs random** | **Structure helps organization (p<0.0001) but HURTS cognition — FDR corrected** |
+| 28 | tvb66 tuning | WIP: continuous weights (14,249x dynamic range) |
 
 ## Relation to Prior Work
 
@@ -107,7 +113,7 @@ python experiments/18_integrated_cognition.py # All together
 
 ## Important Caveats
 
-This project uses diffusion MRI tractography data (TVB96), not synaptic-resolution connectomics. The 96-region parcellation is macro-scale. Effects are real but small. Embodied learning does not yet work (STDP produces motor death). The Wilson-Cowan and spiking models give opposite hierarchies (unexplained). See [RDR-2026-04-01.md](RDR-2026-04-01.md) for full documentation including negative results and expert reviewer feedback.
+This project uses diffusion MRI tractography data, not synaptic-resolution connectomics — 6 orders of magnitude coarser than the Drosophila connectome. With SC-FC validated parameters (r=0.388), the macro-scale connectome creates regional organization (p<0.0001) but does NOT provide cognitive advantage over random wiring (Exp 27, FDR-corrected). The root cause: connectome-driven connections are only 12% of total synaptic input — the structural signal is buried under random local noise. The tvb96 parcellation has only 3 unique weight values; tvb66 (Desikan-Killiany) provides 14,249x dynamic range with continuous weights. See RDR files for complete documentation including negative results.
 
 ## Data
 

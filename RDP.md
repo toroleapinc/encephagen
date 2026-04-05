@@ -48,23 +48,23 @@ The remaining phases scale to individual spiking neurons (~100K), add biological
 
 ---
 
-## 2. Current Status (Phase 1 Complete)
+## 2. Current Status (27 Experiments Complete)
 
 ### What exists
-- 96-region Wilson-Cowan simulation on TVB96 connectome (cortical + subcortical)
-- 5 null model comparisons (degree-preserving, ER, geometric, lattice, weight-shuffled)
-- 4 completed experiments with statistical results
-- Key finding: two-level decomposition (degree → hierarchy, wiring → FC patterns)
-- 10 passing tests, 3 publication-quality figures
+- 19,200 LIF spiking neurons across 96 regions (TVB96) or 66 regions (TVB66, continuous weights)
+- GPU-accelerated with conduction delays, region-specific neuron types, ALIF adaptation
+- E-prop learning (Bellec 2020) with eligibility traces and reward modulation
+- NMDA slow synapses for working memory, Matsuoka CPG for locomotion
+- SC-FC validated parameters (gc=0.20, r=0.388)
+- 27 experiments with statistical controls, FDR correction, 3 null models
+- Interactive terminal interface (interact.py)
 - GitHub: https://github.com/toroleapinc/encephagen
 
-### What doesn't exist yet
-- Individual neurons (currently 1 oscillator per region)
-- Learning of any kind
-- Sensory input beyond mathematical pulses
-- Motor output
-- A body
-- Anything that "behaves"
+### Critical finding
+The connectome creates regional organization (p<0.0001, d=4.0) but does NOT provide cognitive advantage at macro-scale dMRI resolution. Root cause: the connectome signal is only 12% of total synaptic input — drowned by random local connectivity. The fly/worm models succeed because the connectome IS 100% of their connectivity.
+
+### Open problem
+Need to flip the signal-to-noise ratio: make the connectome the dominant driver, not a minor modulator. The tvb66 continuous weights (14,249x dynamic range) provide much richer structural information than tvb96's 3 quantized values.
 
 ---
 
