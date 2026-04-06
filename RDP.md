@@ -107,7 +107,10 @@ Neither connectome nor random learns 3-way stimulus-action task (both at ~36%, c
 `python demo.py` — 16K neurons, 80 regions, T1w/T2w gradient, delays, CPG walking, stimulus response. The brain is alive but structure doesn't differentiate from random.
 
 ### Experiment 32: Newborn Closed-Loop — DONE (body too stable)
-Brain→CPG→Body→Brain loop with inverted pendulum. Both connectome and random survive full 10s with identical metrics. The pendulum self-stabilizes — need properly unstable body (MuJoCo Walker2d) where brain must actively balance.
+Brain→CPG→Body→Brain loop with inverted pendulum. Both connectome and random survive full 10s with identical metrics. The pendulum self-stabilizes.
+
+### Experiment 33: MuJoCo Walker2d — DONE (brain works, no structural advantage)
+Brain controls properly unstable Walker2d biped. **210 steps vs 119 baseline = 78% improvement.** The brain processes sensory input and produces useful motor output. But connectome vs random: 0/5 significant. Both brains control the body equally well.
 
 ### VRAM Budget
 All of the above fits in 12GB:
@@ -155,6 +158,8 @@ All within RTX 5070 (12GB VRAM, 16GB system RAM).
 | Learning advantage | Connectome learns faster than random | **INCONCLUSIVE** (neither learns) |
 | Working memory | PFC persistence with tau_m gradient | Not tested with gradient |
 | Interactive demo | Brain responds to stimuli, drives body | **DONE** (demo.py) |
+| Brain-controlled body | Walker2d alive longer than baseline | **DONE** (210 vs 119 = +78%) |
+| Structural motor advantage | Connectome outperforms random on motor control | **NOT FOUND** (p=0.15) |
 
 ### The dMRI wall
 dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.

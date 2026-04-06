@@ -104,7 +104,8 @@ python experiments/18_integrated_cognition.py # All together
 | **29** | **Neurolib80 validated test** | **0/4 significant — no structural advantage on validated dynamics (FC-FC=0.42)** |
 | 30 | Innate dynamics | Stimulus trapped in visual cortex — dMRI all-excitatory wall |
 | 31 | Learning scaffold | Neither brain learns (both at chance) |
-| **32** | **Newborn closed-loop** | **Brain→CPG→Body loop working, but body too stable to differentiate** |
+| 32 | Newborn closed-loop | Brain→CPG→Body loop, body too stable to differentiate |
+| **33** | **Walker2d brain control** | **Brain keeps biped alive 78% longer (210 vs 119), no structural advantage** |
 
 ## Relation to Prior Work
 
