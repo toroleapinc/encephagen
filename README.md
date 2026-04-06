@@ -1,19 +1,12 @@
 # encephagen
 
-**A functional miniature human brain — 19,200 spiking neurons, real connectome topology, learns from experience.**
+**A miniature human brain — 16,000 spiking neurons, 80 brain regions, HCP connectome, controls a body.**
 
-```
-python interact.py
-```
-
-```
-brain> look A          → visual cortex activates, signal propagates through connectome
-brain> teach A         → pair pattern A with reward, brain learns the association
-brain> test            → trained pattern produces stronger response than novel ones
-brain> memory A        → show pattern, remove it — PFC maintains the trace (75% persistence)
-brain> sound           → auditory cortex activates
-brain> touch           → somatosensory cortex activates
-brain> status          → see all 12 brain regions firing in real-time
+```bash
+python newborn_demo.py            # Brain controls Walker2d body (2.1x baseline survival)
+python newborn_demo.py --render   # Visual rendering
+python demo.py                    # Interactive brain stimulation (no body)
+python interact.py                # Legacy interactive interface
 ```
 
 ## What This Brain Can Do
@@ -30,14 +23,19 @@ brain> status          → see all 12 brain regions firing in real-time
 ## Architecture
 
 ```
-19,200 LIF spiking neurons across 96 brain regions
-Connected by real Human Connectome Project structural connectivity (TVB96)
-GPU-accelerated (PyTorch sparse operations)
+16,000 LIF spiking neurons across 80 brain regions (HCP AAL2 parcellation)
+Connected by real Human Connectome Project structural connectivity (neurolib80)
+SC-FC validated: simulated FC correlates with empirical fMRI at r=0.42
+T1w/T2w timescale gradient: sensory fast (10ms), frontal slow (30ms)
+Conduction delays from tract lengths (7-238ms)
+Feedforward inhibition (3x stronger long-range→inhibitory)
+GPU-accelerated (PyTorch sparse operations, ~390 steps/s)
 
-Cognitive regions:
-  Visual cortex      1,600 neurons  (pattern recognition)
-  Prefrontal cortex  4,000 neurons  (working memory with NMDA slow synapses)
-  Temporal cortex    2,000 neurons  (semantic processing)
+Fly-inspired body control:
+  Brain (16K neurons) → 6 descending motor channels
+  Reflex arcs: righting (PD tilt control), startle, knee stabilization
+  CPG (Matsuoka) → alternating walking rhythm
+  Walker2d body (MuJoCo) → 2.1x baseline survival
   Parietal cortex    1,600 neurons  (spatial/attention)
   Hippocampus          800 neurons  (associative memory)
   Amygdala             400 neurons  (reward learning, conditioning)
