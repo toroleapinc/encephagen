@@ -166,6 +166,8 @@ All within RTX 5070 (12GB VRAM, 16GB system RAM).
 | Brain-controlled body | Walker2d alive longer than baseline | **DONE** (210 vs 119 = +78%) |
 | Structural motor advantage | Connectome outperforms random on motor control | **NOT FOUND** (p=0.15) |
 | Newborn demo | Brain controls body with reflex arcs | **DONE** (2.1x baseline, fly-inspired) |
+| Pure brain control | Brain alone controls body | **FAILS** (25 steps, 4.5x worse than zero) |
+| Lateralized brain righting | Brain replaces PD controller | **97% of PD** (234 vs 240 steps, no training) |
 
 ### The dMRI wall
 dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.

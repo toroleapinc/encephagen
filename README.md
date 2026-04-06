@@ -103,7 +103,9 @@ python experiments/18_integrated_cognition.py # All together
 | 30 | Innate dynamics | Stimulus trapped in visual cortex — dMRI all-excitatory wall |
 | 31 | Learning scaffold | Neither brain learns (both at chance) |
 | 32 | Newborn closed-loop | Brain→CPG→Body loop, body too stable to differentiate |
-| **33** | **Walker2d brain control** | **Brain keeps biped alive 78% longer (210 vs 119), no structural advantage** |
+| 33 | Walker2d brain control | Brain keeps biped alive 78% longer (210 vs 119), no structural advantage |
+| 34 | Pure brain controller | Brain produces NOISE (25 steps, 4.5x worse than zero 113) |
+| **35** | **Lateralized brain** | **Brain replaces PD controller at 97% efficiency (234 vs 240), no training** |
 
 ## Relation to Prior Work
 
