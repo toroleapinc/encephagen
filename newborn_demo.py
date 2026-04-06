@@ -118,11 +118,36 @@ class NewbornBrain:
         for _ in range(5000):
             self.cpg.step(0.1)
 
+        # Precompute visual region indices
+        self.visual_left = [i for i in self.groups['visual']
+                            if 'L' in tau_labels[i] or '_L' in tau_labels[i]]
+        self.visual_right = [i for i in self.groups['visual']
+                             if 'R' in tau_labels[i] or '_R' in tau_labels[i]]
+        self.visual_starts_L = [ri * self.npr for ri in self.visual_left]
+        self.visual_starts_R = [ri * self.npr for ri in self.visual_right]
+
         # Reflex state
         self.prev_obs = None
         self.startle_timer = 0
+        self.visual_stimulus = None  # (side, intensity) or None
+        self.touch_side = None       # 'left' or 'right' or None
+        self.freeze_timer = 0        # freeze after flash
+        self.idle_counter = 0        # counts steps without stimulus → fidgeting
+        self.learning_enabled = False
+        self.learner = None
 
         print("  Ready.\n")
+
+    def enable_learning(self):
+        """Enable e-prop learning from reward."""
+        from encephagen.learning.eprop import EpropParams
+        params = EpropParams(
+            lr=0.02, tau_e=50.0, gamma=0.5, w_max=15.0,
+            regularization=0.0, reward_decay=0.99,
+        )
+        self.learner = self.brain.enable_learning(params)
+        self.learning_enabled = True
+        print("  E-prop learning ENABLED")
 
     def sense(self, obs):
         """Convert Walker2d observation to brain input current.
@@ -148,11 +173,38 @@ class NewbornBrain:
         for s_start in self.soma_starts:
             ext[0, s_start:s_start + self.npr] = total_signal
 
+        # Touch input → somatosensory (lateralized, strong)
+        if self.touch_side is not None:
+            touch_intensity = 120.0
+            # Touch activates somatosensory strongly on the touched side
+            for s_start in self.soma_starts:
+                ext[0, s_start:s_start + self.npr] += touch_intensity
+
+        # Track idle time (no external stimulus → fidgeting)
+        has_stimulus = (self.visual_stimulus is not None or
+                        self.touch_side is not None or
+                        self.startle_timer > 0)
+        if has_stimulus:
+            self.idle_counter = 0
+        else:
+            self.idle_counter += 1
+
+        # Visual input → visual cortex (lateralized)
+        if self.visual_stimulus is not None:
+            side, intensity = self.visual_stimulus
+            if side == 'left' or side == 'both':
+                for s in self.visual_starts_L:
+                    ext[0, s:s + self.npr] = intensity
+            if side == 'right' or side == 'both':
+                for s in self.visual_starts_R:
+                    ext[0, s:s + self.npr] = intensity
+
         # Startle detection: sudden large change in observation
         if self.prev_obs is not None:
             delta = np.abs(obs - self.prev_obs).sum()
             if delta > 5.0:  # sudden change
                 self.startle_timer = 5  # 5 brain cycles of startle
+                self.freeze_timer = 10  # then freeze for 10 cycles
                 # Flash ALL sensory regions
                 for gname in ['somatosensory', 'visual', 'auditory']:
                     for ri in self.groups[gname]:
@@ -161,13 +213,16 @@ class NewbornBrain:
         self.prev_obs = obs.copy()
         return ext
 
-    def think(self, ext, brain_steps=20):
+    def think(self, ext, brain_steps=20, reward=0.0):
         """Run brain for brain_steps and extract motor commands."""
         motor_acc = torch.zeros(self.n_motor, device=self.device)
-        with torch.no_grad():
-            for _ in range(brain_steps):
-                self.state, spikes = self.brain.step(self.state, ext)
-                motor_acc += spikes[0, self.motor_tensor].float()
+        for _ in range(brain_steps):
+            self.state, spikes = self.brain.step(self.state, ext)
+            motor_acc += spikes[0, self.motor_tensor].float()
+
+        # Apply reward if learning
+        if self.learning_enabled and abs(reward) > 0.01:
+            self.brain.apply_reward(spikes, reward=reward * 0.05)
 
         # Extract 6 motor channel rates
         motor_rates = np.zeros(6)
@@ -201,29 +256,71 @@ class NewbornBrain:
             self.startle_timer -= 1
 
         # === CPG step ===
-        cpg_drive = brain_drive + startle_boost
-        torques = self.cpg.step(2.0, brain_drive=cpg_drive)  # 2ms CPG step
+        # Base drive for gentle forward locomotion
+        cpg_drive = 0.2 + brain_drive + startle_boost
+        torques = self.cpg.step(2.0, brain_drive=cpg_drive)
 
         # === Compose final action ===
+        # Walker2d joints: [right_thigh, right_leg, right_foot,
+        #                   left_thigh, left_leg, left_foot]
         action = np.zeros(6, dtype=np.float32)
 
-        # Torques from CPG (walking rhythm)
-        action[0] = torques[2] * 0.4   # left hip (thigh)
-        action[1] = torques[3] * 0.3   # left knee (leg)
-        action[2] = 0.0                # left ankle (minimal)
-        action[3] = torques[0] * 0.4   # right hip (thigh)
-        action[4] = torques[1] * 0.3   # right knee (leg)
-        action[5] = 0.0                # right ankle (minimal)
+        # CPG walking rhythm — alternating hip swing
+        # Right leg
+        action[0] = torques[0] * 0.3     # right thigh
+        action[1] = torques[1] * 0.2     # right leg (knee)
+        action[2] = torques[1] * 0.1     # right foot
+        # Left leg (anti-phase)
+        action[3] = torques[2] * 0.3     # left thigh
+        action[4] = torques[3] * 0.2     # left leg
+        action[5] = torques[3] * 0.1     # left foot
 
-        # Righting reflex — hips push against tilt
+        # Gentle forward bias
+        action[0] += 0.08
+        action[3] += 0.08
+
+        # Orienting reflex: asymmetric visual → asymmetric hip torque
+        # Light on left → turn left (more right hip, less left hip)
+        if self.visual_stimulus is not None:
+            side, intensity = self.visual_stimulus
+            orient_strength = min(intensity / 100.0, 1.0) * 0.15
+            if side == 'left':
+                action[0] -= orient_strength  # reduce left hip
+                action[3] += orient_strength  # increase right hip → turn left
+            elif side == 'right':
+                action[0] += orient_strength
+                action[3] -= orient_strength
+
+        # Righting reflex — both hips push against tilt
         action[0] += righting * 0.3
         action[3] += righting * 0.3
 
-        # Knee stabilization — keep knees slightly bent (prevents hyperextension)
-        action[1] += 0.1  # slight constant knee flexion
+        # Knee stabilization — slight flexion prevents hyperextension
+        action[1] += 0.1
         action[4] += 0.1
 
-        # Brain motor modulation
+        # Withdrawal reflex: touch on one side → pull away (flex that side)
+        if self.touch_side is not None:
+            if self.touch_side == 'left':
+                action[3] -= 0.3   # flex left hip (pull away)
+                action[4] += 0.3   # bend left knee
+            elif self.touch_side == 'right':
+                action[0] -= 0.3   # flex right hip
+                action[1] += 0.3   # bend right knee
+            self.touch_side = None  # one-shot
+
+        # Freeze after visual flash
+        if self.freeze_timer > 0:
+            action *= 0.3  # reduce all torques (freeze)
+            self.freeze_timer -= 1
+
+        # Fidgeting: no stimulus for a while → increase CPG drive (restless)
+        if self.idle_counter > 50:  # ~1 second of no stimulus
+            fidget = min((self.idle_counter - 50) / 200.0, 0.3)
+            action[0] += fidget * np.sin(self.idle_counter * 0.1)
+            action[3] += fidget * np.cos(self.idle_counter * 0.1)
+
+        # Brain motor modulation (subtle influence on each joint)
         for a in range(6):
             action[a] += (motor_rates[a] - 0.04) * 5.0
 
@@ -246,9 +343,11 @@ class NewbornBrain:
         return rates
 
 
-def run_demo(render=False, duration_s=30):
+def run_demo(render=False, duration_s=30, learn=False):
     """Run the newborn brain-body demo."""
     newborn = NewbornBrain()
+    if learn:
+        newborn.enable_learning()
 
     render_mode = "human" if render else None
     env = gym.make('Walker2d-v5', render_mode=render_mode)
@@ -262,6 +361,7 @@ def run_demo(render=False, duration_s=30):
     heights = []
     tilts = []
     rewards = []
+    x_positions = []
 
     print(f"  Running for {duration_s}s ({max_steps} steps)...")
     print(f"  Baseline (no brain): ~119 steps before falling")
@@ -272,7 +372,9 @@ def run_demo(render=False, duration_s=30):
     for step in range(max_steps):
         # Sense → Think → Act
         ext = newborn.sense(obs)
-        motor_rates = newborn.think(ext, brain_steps=20)
+        # Pass previous reward for learning
+        prev_reward = rewards[-1] if rewards else 0.0
+        motor_rates = newborn.think(ext, brain_steps=20, reward=prev_reward)
         action = newborn.act(motor_rates, obs)
 
         # Step environment
@@ -284,6 +386,8 @@ def run_demo(render=False, duration_s=30):
         heights.append(obs[0])
         tilts.append(abs(obs[1]))
         rewards.append(reward)
+        # Walker2d x-position is tracked via cumulative reward (forward velocity)
+        x_positions.append(total_reward)
 
         # Print status every 5 seconds (250 steps)
         if step > 0 and step % 250 == 0:
@@ -322,6 +426,7 @@ def run_demo(render=False, duration_s=30):
     print(f"  Total reward: {total_reward:.1f}")
     print(f"  Mean height: {np.mean(heights):.3f}")
     print(f"  Mean tilt: {np.mean(tilts):.3f}")
+    print(f"  Forward progress: {total_reward:.1f} (cumulative reward ≈ distance)")
     print(f"  Wall time: {elapsed:.1f}s")
     print(f"  Brain speed: {steps*20/(elapsed):.0f} neural steps/s")
 
@@ -335,7 +440,8 @@ def run_interactive():
     obs, _ = env.reset()
 
     print("  Interactive mode. Brain is controlling the body.")
-    print("  Commands: status, startle, reset, run <N>, quit")
+    print("  Commands: status, startle, light <left|right|off>, touch <left|right>,")
+    print("            flash, reset, run <N>, quit")
     print()
 
     total_steps = 0
@@ -360,6 +466,26 @@ def run_interactive():
         elif cmd == 'startle':
             newborn.startle_timer = 10
             print("  STARTLE triggered!")
+        elif cmd.startswith('light'):
+            parts = cmd.split()
+            if len(parts) > 1 and parts[1] in ('left', 'right', 'both'):
+                newborn.visual_stimulus = (parts[1], 80.0)
+                print(f"  Visual stimulus: {parts[1]} side ON")
+            elif len(parts) > 1 and parts[1] == 'off':
+                newborn.visual_stimulus = None
+                print("  Visual stimulus OFF")
+            else:
+                print("  Usage: light <left|right|both|off>")
+        elif cmd.startswith('touch'):
+            parts = cmd.split()
+            side = parts[1] if len(parts) > 1 else 'right'
+            newborn.touch_side = side
+            print(f"  Touch {side} side → withdrawal reflex")
+        elif cmd == 'flash':
+            newborn.visual_stimulus = ('both', 150.0)
+            newborn.startle_timer = 5
+            newborn.freeze_timer = 10
+            print("  FLASH! → startle + freeze")
         elif cmd == 'reset':
             obs, _ = env.reset()
             episode_steps = 0
@@ -395,10 +521,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--render", action="store_true", help="Render Walker2d")
     parser.add_argument("--interactive", action="store_true", help="Interactive mode")
+    parser.add_argument("--learn", action="store_true", help="Enable e-prop learning")
     parser.add_argument("--duration", type=int, default=30, help="Duration in seconds")
     args = parser.parse_args()
 
     if args.interactive:
         run_interactive()
     else:
-        run_demo(render=args.render, duration_s=args.duration)
+        run_demo(render=args.render, duration_s=args.duration, learn=args.learn)
