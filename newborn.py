@@ -32,6 +32,7 @@ from encephagen.connectome import Connectome
 from encephagen.gpu.spiking_brain_gpu import SpikingBrainGPU
 from encephagen.spinal.cpg import SpinalCPG, CPGParams
 from encephagen.subcortical.brainstem import BrainstemReflexes, BasalGangliaGating
+from encephagen.spinal.spiking_cpg import SpikingCPG
 
 
 class Newborn:
@@ -47,22 +48,42 @@ class Newborn:
                                                     Cortex (16K neurons, observer)
     """
 
-    def __init__(self, body_type="walker2d", device="cuda"):
+    def __init__(self, body_type="walker2d", device="cuda", use_spiking_cpg=False):
         print("=" * 60)
         print("  THE NEWBORN — Biologically Correct Architecture")
         print("  Brainstem reflexes + Spinal CPG + Cortex observer")
         print("=" * 60)
 
+        self.device = device
+
         # ---- Subcortical controllers (the ACTUAL controllers at birth) ----
         self.brainstem = BrainstemReflexes()
         self.basal_ganglia = BasalGangliaGating()
-        self.cpg = SpinalCPG(CPGParams(
-            tau=50.0, tau_adapt=500.0, drive=1.0,
-            w_mutual=2.5, w_crossed=1.5, beta=2.5,
-        ))
-        # Warmup CPG
-        for _ in range(5000):
-            self.cpg.step(0.1)
+        self.use_spiking_cpg = use_spiking_cpg
+
+        if use_spiking_cpg:
+            print("  Building SPIKING CPG (80 neurons, identified interneuron classes)...", flush=True)
+            self.spiking_cpg = SpikingCPG(device=device)
+            # Load CMA-ES optimized weights
+            import os
+            params_file = "results/best_cpg_params_cmaes.npy"
+            if os.path.exists(params_file):
+                self._apply_optimized_params(np.load(params_file))
+                print("  Loaded CMA-ES optimized weights")
+            self.spiking_cpg_state = self.spiking_cpg.init_state()
+            # Warmup
+            with torch.no_grad():
+                for _ in range(3000):
+                    self.spiking_cpg_state, _, _ = self.spiking_cpg.step(self.spiking_cpg_state)
+            self.cpg = None  # not using Matsuoka
+        else:
+            self.cpg = SpinalCPG(CPGParams(
+                tau=50.0, tau_adapt=500.0, drive=1.0,
+                w_mutual=2.5, w_crossed=1.5, beta=2.5,
+            ))
+            for _ in range(5000):
+                self.cpg.step(0.1)
+            self.spiking_cpg = None
 
         # ---- Cortex (observer at birth, learns over time) ----
         print("  Building cortex (16,000 neurons, 80 regions)...", flush=True)
@@ -120,6 +141,86 @@ class Newborn:
         self.cortex_rates = {}
         self.body_type = body_type
         print("  Ready.\n")
+
+    def _apply_optimized_params(self, params):
+        """Apply CMA-ES optimized weights to spiking CPG."""
+        (w_mutual_fe, w_mutual_ef, w_rg_mn, w_v0d_in, w_v0d_out,
+         w_pf_drive, w_pf_inh, drive_flex, drive_ext, drive_mn,
+         drive_v0d, beta_adapt, tau_adapt_ms, reset_v) = params
+
+        cpg = self.spiking_cpg
+        W = cpg.W.clone()
+
+        for side in ['L', 'R']:
+            other = 'R' if side == 'L' else 'L'
+            fr = cpg.idx[f'{side}_flex_rg']; er = cpg.idx[f'{side}_ext_rg']
+            fm = cpg.idx[f'{side}_flex_mn']; em = cpg.idx[f'{side}_ext_mn']
+            v1 = cpg.idx[f'{side}_v1']; v2b = cpg.idx[f'{side}_v2b']
+            v0d = cpg.idx[f'{side}_v0d']; cfr = cpg.idx[f'{other}_flex_rg']
+
+            def set_w(src, dst, w, norm=True):
+                n = src.stop - src.start
+                wn = w / max(n, 1) if norm else w
+                for i in range(src.start, src.stop):
+                    for j in range(dst.start, dst.stop):
+                        if i != j: W[i, j] = wn
+
+            set_w(fr, er, w_mutual_fe); set_w(er, fr, w_mutual_ef)
+            set_w(fr, fm, w_rg_mn, norm=False); set_w(er, em, w_rg_mn, norm=False)
+            set_w(fr, v0d, w_v0d_in, norm=False); set_w(v0d, cfr, w_v0d_out, norm=False)
+            set_w(fr, v1, w_pf_drive, norm=False); set_w(er, v2b, w_pf_drive, norm=False)
+            set_w(v1, em, w_pf_inh, norm=False); set_w(v2b, fm, w_pf_inh, norm=False)
+
+        cpg.W = W
+        cpg.tonic_drive = torch.zeros(cpg.n_total, device=self.device)
+        for side in ['L', 'R']:
+            cpg.tonic_drive[cpg.idx[f'{side}_flex_rg']] = drive_flex
+            cpg.tonic_drive[cpg.idx[f'{side}_ext_rg']] = drive_ext
+            cpg.tonic_drive[cpg.idx[f'{side}_flex_mn']] = drive_mn
+            cpg.tonic_drive[cpg.idx[f'{side}_ext_mn']] = drive_mn
+            cpg.tonic_drive[cpg.idx[f'{side}_v1']] = 5.0
+            cpg.tonic_drive[cpg.idx[f'{side}_v2b']] = 5.0
+            cpg.tonic_drive[cpg.idx[f'{side}_v0d']] = drive_v0d
+        # Store adaptation params for custom step
+        self._cpg_beta = beta_adapt
+        self._cpg_tau = tau_adapt_ms
+        self._cpg_reset_v = reset_v
+
+    def _spiking_cpg_step(self, drive_modulation=0.0):
+        """Step the spiking CPG with optimized parameters."""
+        cpg = self.spiking_cpg
+        state = self.spiking_cpg_state
+        v = state['v']; refrac = state['refrac']
+        i_syn = state['i_syn']; adaptation = state['adaptation']
+
+        drive = cpg.tonic_drive * (1.0 + drive_modulation * 0.5)
+        noise = torch.randn(cpg.n_total, device=self.device) * 0.5
+        i_total = i_syn + drive - adaptation + noise
+        active = refrac <= 0
+        dv = (-v + i_total) / cpg.tau_m
+        v = v + cpg.dt * dv * active.float()
+        spikes = (v >= cpg.v_threshold) & active
+
+        rv = torch.zeros_like(v)
+        for s in ['L', 'R']:
+            rv[cpg.idx[f'{s}_flex_rg']] = self._cpg_reset_v
+            rv[cpg.idx[f'{s}_ext_rg']] = self._cpg_reset_v
+        v = torch.where(spikes, rv, v)
+        refrac = torch.where(spikes, torch.full_like(refrac, 1.0), refrac)
+        refrac = torch.clamp(refrac - cpg.dt, min=0)
+        adaptation = adaptation * np.exp(-cpg.dt / self._cpg_tau) + spikes.float() * self._cpg_beta
+        syn_input = cpg.W @ spikes.float()
+        i_syn = i_syn * np.exp(-cpg.dt / 5.0) + syn_input
+
+        self.spiking_cpg_state = {'v': v, 'refrac': refrac, 'i_syn': i_syn, 'adaptation': adaptation}
+
+        # Motor output
+        motor = {}
+        for side in ['L', 'R']:
+            lf = spikes[cpg.idx[f'{side}_flex_mn']].float().mean().item()
+            le = spikes[cpg.idx[f'{side}_ext_mn']].float().mean().item()
+            motor[f'{side}_torque'] = le - lf
+        return motor
 
     def extract_sensory(self, obs):
         """Convert body observation to sensory dict for brainstem."""
@@ -187,7 +288,24 @@ class Newborn:
         gated = self.basal_ganglia.gate(reflexes)
 
         # 4. Spinal CPG (stepping reflex)
-        cpg_torques = self.cpg.step(2.0, brain_drive=gated['stepping_drive'])
+        if self.use_spiking_cpg:
+            # Run spiking CPG for 20 timesteps per body step
+            motor_acc = {'L_torque': 0.0, 'R_torque': 0.0}
+            n_cpg_steps = 20
+            with torch.no_grad():
+                for _ in range(n_cpg_steps):
+                    motor = self._spiking_cpg_step(drive_modulation=gated['stepping_drive'])
+                    motor_acc['L_torque'] += motor['L_torque']
+                    motor_acc['R_torque'] += motor['R_torque']
+            # Average and scale
+            cpg_torques = np.array([
+                motor_acc['R_torque'] / n_cpg_steps * 5.0,  # right hip
+                motor_acc['R_torque'] / n_cpg_steps * 3.5,  # right knee
+                motor_acc['L_torque'] / n_cpg_steps * 5.0,  # left hip
+                motor_acc['L_torque'] / n_cpg_steps * 3.5,  # left knee
+            ])
+        else:
+            cpg_torques = self.cpg.step(2.0, brain_drive=gated['stepping_drive'])
 
         # 5. Cortex observes (processes sensory, doesn't control)
         self.cortex_step(sensory)
@@ -348,9 +466,9 @@ class Newborn:
         return panel
 
 
-def run_demo(body_type="walker2d", duration_s=30, video=False):
+def run_demo(body_type="walker2d", duration_s=30, video=False, spiking_cpg=False):
     """Run the biologically correct newborn demo."""
-    newborn = Newborn(body_type=body_type)
+    newborn = Newborn(body_type=body_type, use_spiking_cpg=spiking_cpg)
 
     env_name = 'Humanoid-v5' if body_type == "humanoid" else 'Walker2d-v5'
     render_mode = 'rgb_array' if video else None
@@ -445,8 +563,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--humanoid", action="store_true")
     parser.add_argument("--video", action="store_true")
+    parser.add_argument("--spiking-cpg", action="store_true",
+                        help="Use 80-neuron spiking CPG instead of Matsuoka rate model")
     parser.add_argument("--duration", type=int, default=30)
     args = parser.parse_args()
 
     body = "humanoid" if args.humanoid else "walker2d"
-    run_demo(body_type=body, duration_s=args.duration, video=args.video)
+    run_demo(body_type=body, duration_s=args.duration, video=args.video,
+             spiking_cpg=args.spiking_cpg)
