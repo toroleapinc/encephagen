@@ -1,14 +1,16 @@
 # Encephagen: Research Design Proposal v5
 
+We originally hypothesized that the specific wiring pattern of the human mesoscale connectome confers computational advantages over equivalent random networks. 33 controlled experiments at the Wilson-Cowan and spiking network scale, with SC-FC validation (r=0.42 vs empirical fMRI), BH-FDR correction, and multiple null models, did not support this hypothesis. We report this null result and reformulate the research question: **does the human brain's subcortical circuit architecture encode specific innate behavioral primitives, and can these be demonstrated in simulation?**
+
+The answer to the reformulated question: **yes.** An 80-neuron spiking CPG with biologically identified interneuron classes (V0/V1/V2a/V2b/V3/Shox2), calibrated by CMA-ES, produces sustained locomotor rhythm. Ten neonatal reflexes implemented as brainstem circuits produce innate behavior on a 3D Humanoid body. The cortex (16,000 neurons, 80 regions) observes through the real human connectome but does not control the body at birth — consistent with developmental neuroscience (Exp 34: pure cortical control = noise).
+
 ## 0. Philosophical Foundation
 
-This project is built on a set of core beliefs about how intelligence works:
-
 ### Everything is signal
-What enters our eyes and ears are signals. The brain decomposes these signals and transforms them into understanding — like a Fourier transform, but learned, adaptive, and multi-scale. The brain is fundamentally a signal processor, and its structure determines HOW it processes.
+What enters our eyes and ears are signals. The brain decomposes and transforms them. Its structure determines HOW it processes.
 
-### Structure constrains computation
-The Drosophila connectome experiment (Lappalainen et al., 2024) showed that synaptic-resolution structure can replicate specific sensory computations without training. At our macro-scale (80 regions), structure alone does NOT produce cognitive advantage over random wiring (Exp 29, 0/4 significant, validated FC-FC(emp)=0.42). But this may be because we're missing a key ingredient: regional heterogeneity.
+### Structure constrains but does not determine computation
+At synaptic resolution (Drosophila, Lappalainen 2024), structure can replicate specific sensory computations. At macro-scale dMRI resolution (80 regions), structure does NOT provide cognitive advantage over random wiring (0/33 experiments). The computational advantages of human brain organization may reside in local microcircuit properties, cell-type-specific connectivity, and neuromodulatory systems — not in the macro-connectome topology (Maier-Hein et al. 2017: dMRI tractography produces systematically biased false positives in long-range connections).
 
 ### 先天 × 后天 — Innate × Learned
 Walking = innate CPG hardware × learned calibration. The genome gives you the POSSIBILITY of walking (spinal cord CPGs, stepping reflex). Experience turns that possibility into REALITY (balance calibration, muscle coordination). This framework applies to all cognitive abilities: the structure provides the scaffold, learning fills it with content.
@@ -154,20 +156,45 @@ All of the above fits in 12GB:
 | Pure brain body control (brain = noise without calibration) | ❌ |
 | Learning from experience | ❌ (not attempted — pure 先天) |
 
+### Key scientific findings (from expert panel review):
+
+**Finding 1: "Cortex as observer" (Exp 34)** — The most scientifically important result. A 16,000-neuron spiking cortex connected to motor output produces noise, not control. Behavioral signal lives in brainstem and subcortical circuits. This is consistent with the motor control literature (Grillner, Llinas, Pruszynski) and developmental neuroscience. This finding needs parameter sensitivity testing to confirm it's not an artifact of the specific LIF parameter regime.
+
+**Finding 2: 0/33 null result** — A carefully designed 33-experiment test of whether human connectome topology confers computational advantage returned a comprehensive null. This constrains theories that attribute computational power to macro-connectome topology and suggests advantages reside in local microcircuit properties, cell-type connectivity, or neuromodulatory systems.
+
+**Finding 3: CMA-ES CPG** — The spiking CPG required evolutionary search to oscillate. This raises the question: does the connectome-constrained architecture have a LARGER basin of oscillation in parameter space than a random-wired CPG? A larger basin = genuine innate architectural advantage. This experiment has not been done and is now the scientific heart of the 先天 question.
+
 ### The 先天 ceiling:
-The newborn simulation matches real newborn capability: reflexes, breathing, fidgeting, stepping. A real newborn can't do more than this without learning. Everything beyond reflexes — balance improvement, voluntary movement, cortical control — requires 后天 (experience-dependent learning).
+The newborn simulation matches real newborn capability: reflexes, breathing, fidgeting, stepping. Everything beyond requires 后天 (learning).
+
+### Outstanding experiments from expert review:
+1. **Peak SC-FC real vs null across G sweep** — Does the real connectome achieve higher MAXIMUM SC-FC than random at any G?
+2. **Tractography thresholding sensitivity** — Does r=0.42 survive thresholding at different streamline densities? (Maier-Hein et al. 2017)
+3. **CPG parameter basin analysis** — Is the oscillation basin larger for connectome-constrained vs random CPG? (THE key 先天 test)
+4. **Spike-based FC validation** — Compare spiking output statistics to Allen Brain Institute Neuropixels recordings (firing rates 2-20Hz, ISI CV>0.5, pairwise correlations 0.01-0.1)
+5. **"Cortex as observer" parameter sensitivity** — Does changing E/I balance or synaptic timescales in the cortex change the conclusion?
 
 ---
 
 ## 6. 后天 Phase: NOT STARTED (next chapter)
 
-The cortex (16,000 neurons) is ready to learn. Three approaches for the developmental transition:
+The cortex (16,000 neurons) is ready to learn.
+
+### Experiment design (pre-registered, from expert panel):
+**Task:** Task FAMILY, not single task. Train on environments A1, A2, A3. Test on A4 (novel, same family).
+**Comparison:** Connectome-structured vs random-wired, identical architecture otherwise.
+**Seeds:** Minimum 20 random seeds per condition.
+**Metric:** Learning curve slope AND final generalization performance on held-out environment.
+**Statistical test:** Wilcoxon rank-sum on generalization performance across seeds (not t-test — weight distributions are non-normal after learning).
+**Outcome:** If connectome does not show significant advantage in generalization after proper multi-seed comparison → definitive null for 先天 learning advantage. This null result, with 37-experiment trajectory, is a legitimate scientific contribution.
+
+### Three approaches:
 
 ### Approach 1: Cortical takeover
-Over simulated "developmental time," the cortex gradually learns to modulate brainstem reflexes via e-prop. Primitive reflexes weaken as cortical control strengthens. This mirrors corticospinal myelination at 2-4 months.
+Over simulated developmental time, cortex learns to modulate brainstem reflexes via e-prop. Primitive reflexes weaken as cortical control strengthens. Mirrors corticospinal myelination at 2-4 months.
 
-### Approach 2: Connectome as learning prior
-Train two newborns — one with real connectome, one random — through identical experiences. If the connectome newborn develops faster, the structure provides a learning scaffold. This is the pure 先天 × 后天 test.
+### Approach 2: Connectome as learning prior (generalization test)
+Train two newborns — one with real connectome, one random — through identical experiences. Test on NOVEL environments. If connectome generalizes better → structure provides learning scaffold.
 
 ### Approach 3: Developmental refinement
 Start with noisy connectome, let STDP/e-prop refine it through experience. Compare learned connectivity to real connectome. If learning converges toward real pattern → connectome is an attractor of learning dynamics.
