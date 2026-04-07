@@ -31,11 +31,14 @@ Conduction delays from tract lengths (7-238ms)
 Feedforward inhibition (3x stronger long-range→inhibitory)
 GPU-accelerated (PyTorch sparse operations, ~390 steps/s)
 
-Fly-inspired body control:
-  Brain (16K neurons) → 6 descending motor channels
-  Reflex arcs: righting (PD tilt control), startle, knee stabilization
-  CPG (Matsuoka) → alternating walking rhythm
-  Walker2d body (MuJoCo) → 2.1x baseline survival
+Biologically correct newborn architecture:
+  Cortex (16K neurons) → observer at birth, learns to take over
+  Brainstem → hardwired reflexes (righting, Moro, startle, stepping)
+  Basal ganglia → reflex priority gating
+  Spinal CPG (80 spiking neurons) → identified interneuron classes
+    Shox2 rhythm generators + V0/V1/V2a/V2b/V3 + motor neurons
+    CMA-ES calibrated weights → sustained alternating gait
+  Walker2d/Humanoid body (MuJoCo) → 2.2x baseline survival
   Parietal cortex    1,600 neurons  (spatial/attention)
   Hippocampus          800 neurons  (associative memory)
   Amygdala             400 neurons  (reward learning, conditioning)
@@ -106,6 +109,8 @@ python experiments/18_integrated_cognition.py # All together
 | 33 | Walker2d brain control | Brain keeps biped alive 78% longer (210 vs 119), no structural advantage |
 | 34 | Pure brain controller | Brain produces NOISE (25 steps, 4.5x worse than zero 113) |
 | **35** | **Lateralized brain** | **Brain replaces PD controller at 97% efficiency (234 vs 240), no training** |
+| 36 | ES optimization of spiking CPG | Intermittent alternation (fitness 2.4, verification 0.3) |
+| **37** | **CMA-ES spiking CPG** | **Sustained oscillation from 80 identified interneurons (fitness 5.5, verified 2.4)** |
 
 ## Relation to Prior Work
 

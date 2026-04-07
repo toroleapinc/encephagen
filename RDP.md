@@ -112,10 +112,16 @@ Brain→CPG→Body→Brain loop with inverted pendulum. Both connectome and rand
 ### Experiment 33: MuJoCo Walker2d — DONE (brain works, no structural advantage)
 Brain controls properly unstable Walker2d biped. **210 steps vs 119 baseline = 78% improvement.** But connectome vs random: 0/5 significant.
 
-### Newborn Demo (fly-inspired) — DONE
-Same architecture as Eon Systems fly: CPG handles locomotion, brain provides high-level modulation through descending commands, hardwired reflex arcs (righting, startle, knee stabilization) handle balance. **Mean survival: 246 steps = 2.1x baseline.** Best run: 386 steps (7.7s).
+### Newborn Demo (biologically correct) — DONE
+Subcortical architecture: brainstem reflexes + spinal CPG + BG gating. Cortex observes, doesn't control. **Mean survival: 246 steps = 2.1x baseline.**
 
-Run: `python newborn_demo.py` or `python newborn_demo.py --render`
+### Spiking CPG with identified interneurons — DONE
+80 LIF neurons (Shox2, V0d, V0v, V1, V2a, V2b, V3, MNs) from Rybak/Danner/Kiehn. CMA-ES calibrated weights. **Sustained oscillation (fitness 5.5 → 2.4 verified).** Integrated into newborn demo.
+
+### Lateralized brain assessment — DONE
+Pure brain = noise (25 steps, worse than zero). Lateralized brain righting = 97% of PD controller (234 vs 240). The cortex provides real corrective routing but needs weight calibration.
+
+Run: `python newborn.py --spiking-cpg --video`
 
 ### VRAM Budget
 All of the above fits in 12GB:
@@ -165,7 +171,9 @@ All within RTX 5070 (12GB VRAM, 16GB system RAM).
 | Interactive demo | Brain responds to stimuli, drives body | **DONE** (demo.py) |
 | Brain-controlled body | Walker2d alive longer than baseline | **DONE** (210 vs 119 = +78%) |
 | Structural motor advantage | Connectome outperforms random on motor control | **NOT FOUND** (p=0.15) |
-| Newborn demo | Brain controls body with reflex arcs | **DONE** (2.1x baseline, fly-inspired) |
+| Newborn demo | Brain controls body with reflex arcs | **DONE** (2.2x baseline) |
+| Spiking CPG | Identified interneurons produce gait | **DONE** (80 neurons, CMA-ES calibrated) |
+| Lateralized brain | Brain produces corrective motor output | **DONE** (97% of PD controller) |
 | Pure brain control | Brain alone controls body | **FAILS** (25 steps, 4.5x worse than zero) |
 | Lateralized brain righting | Brain replaces PD controller | **97% of PD** (234 vs 240 steps, no training) |
 
