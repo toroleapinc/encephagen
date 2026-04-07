@@ -1,4 +1,4 @@
-# Encephagen: Research Design Proposal v4
+# Encephagen: Research Design Proposal v5
 
 ## 0. Philosophical Foundation
 
@@ -133,49 +133,60 @@ All of the above fits in 12GB:
 
 ---
 
-## 5. What's Outside the Box
+## 5. 先天 Phase: COMPLETE
 
-### Idea 1: Multi-scale co-simulation
-Don't spike everywhere. Use Wilson-Cowan at the regional level (which produces realistic SC-FC) and spiking neurons only in regions of interest (PFC for working memory, visual cortex for perception). This is what Arbor-TVB does. The macro-scale dynamics provide the CONTEXT, spiking provides the COMPUTATION.
+### What pure innate structure achieves (no learning):
+| Achievement | Status |
+|-------------|--------|
+| SC-FC validated cortex (r=0.42 vs real fMRI) | ✅ |
+| Timescale hierarchy (r=-0.45, matches Murray 2014) | ✅ |
+| 10/15 neonatal reflexes on Humanoid body | ✅ |
+| 80-neuron spiking CPG with identified interneuron classes | ✅ |
+| Lateralized brain produces 97% of PD controller from structure alone | ✅ |
+| Breathing rhythm, general movements, Moro, startle, grasp, ATNR | ✅ |
+| Cortex observes through real human connectome (not controlling) | ✅ |
 
-### Idea 2: The connectome as a learning prior
-Stop testing whether the connectome produces better innate performance. Test whether it produces a better LEARNING SUBSTRATE. Train two identical agents — one with connectome architecture, one with random — on the same sequence of experiences. The connectome's role isn't to know things; it's to be better at LEARNING things. This is the 先天 × 后天 hypothesis in its purest form.
+### What pure innate structure does NOT achieve:
+| Finding | Status |
+|---------|--------|
+| Connectome advantage over random (0/33 experiments) | ❌ |
+| Stimulus propagation through cortex | ❌ (dMRI all-excitatory wall) |
+| Pure brain body control (brain = noise without calibration) | ❌ |
+| Learning from experience | ❌ (not attempted — pure 先天) |
 
-### Idea 3: Developmental approach
-Real brains aren't born with adult connectivity. They start with a rough scaffold and REFINE it through experience (synaptic pruning, myelination). Start with a sparse, noisy version of the connectome and let STDP/e-prop refine it. Compare the final connectivity pattern to the real connectome. If learning converges toward the real pattern, that proves the connectome is an ATTRACTOR of the learning dynamics — the most powerful possible evidence for 先天 × 后天.
+### The 先天 ceiling:
+The newborn simulation matches real newborn capability: reflexes, breathing, fidgeting, stepping. A real newborn can't do more than this without learning. Everything beyond reflexes — balance improvement, voluntary movement, cortical control — requires 后天 (experience-dependent learning).
 
 ---
 
-## 6. Resource Requirements
+## 6. 后天 Phase: NOT STARTED (next chapter)
 
-| Phase | GPU Time | VRAM | Effort |
-|-------|----------|------|--------|
-| A: Timescale gradient | ~2 hours | <1GB | 1 day |
-| B: Innate dynamics | ~4 hours | <1GB | 1 week |
-| C: Learning advantage | ~8 hours | <2GB | 2 weeks |
-| D: Microcircuits | ~4 hours | <2GB | 2-4 weeks |
+The cortex (16,000 neurons) is ready to learn. Three approaches for the developmental transition:
 
-All within RTX 5070 (12GB VRAM, 16GB system RAM).
+### Approach 1: Cortical takeover
+Over simulated "developmental time," the cortex gradually learns to modulate brainstem reflexes via e-prop. Primitive reflexes weaken as cortical control strengthens. This mirrors corticospinal myelination at 2-4 months.
+
+### Approach 2: Connectome as learning prior
+Train two newborns — one with real connectome, one random — through identical experiences. If the connectome newborn develops faster, the structure provides a learning scaffold. This is the pure 先天 × 后天 test.
+
+### Approach 3: Developmental refinement
+Start with noisy connectome, let STDP/e-prop refine it through experience. Compare learned connectivity to real connectome. If learning converges toward real pattern → connectome is an attractor of learning dynamics.
 
 ---
 
-## 7. Success Criteria
+## 7. Full Success Criteria
 
-| Milestone | Criterion | Status |
-|-----------|-----------|--------|
-| SC-FC validation | FC-FC(emp) > 0.3 | **DONE** (r=0.42) |
-| Regional heterogeneity | Timescale hierarchy matches Murray 2014 | **DONE** (r=-0.45) |
-| Innate dynamics | Stimulus propagation through connectome | **BLOCKED** (dMRI wall) |
-| Learning advantage | Connectome learns faster than random | **INCONCLUSIVE** (neither learns) |
-| Working memory | PFC persistence with tau_m gradient | Not tested with gradient |
-| Interactive demo | Brain responds to stimuli, drives body | **DONE** (demo.py) |
-| Brain-controlled body | Walker2d alive longer than baseline | **DONE** (210 vs 119 = +78%) |
-| Structural motor advantage | Connectome outperforms random on motor control | **NOT FOUND** (p=0.15) |
-| Newborn demo | Brain controls body with reflex arcs | **DONE** (2.2x baseline) |
-| Spiking CPG | Identified interneurons produce gait | **DONE** (80 neurons, CMA-ES calibrated) |
-| Lateralized brain | Brain produces corrective motor output | **DONE** (97% of PD controller) |
-| Pure brain control | Brain alone controls body | **FAILS** (25 steps, 4.5x worse than zero) |
-| Lateralized brain righting | Brain replaces PD controller | **97% of PD** (234 vs 240 steps, no training) |
+| Milestone | Status |
+|-----------|--------|
+| SC-FC validation (r > 0.3) | **DONE** (r=0.42) |
+| Timescale hierarchy | **DONE** (r=-0.45) |
+| Spiking CPG with identified interneurons | **DONE** (80 neurons, CMA-ES) |
+| 10+ innate behaviors | **DONE** (10/15) |
+| Full newborn on Humanoid body | **DONE** (1.2x baseline) |
+| Lateralized brain corrective output | **DONE** (97% of PD controller) |
+| Structural advantage over random | **NOT FOUND** (0/33) |
+| Cortical developmental takeover | NOT STARTED (后天 phase) |
+| Learning scaffold advantage | NOT STARTED (后天 phase) |
 
 ### The dMRI wall
 dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.

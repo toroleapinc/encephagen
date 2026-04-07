@@ -1,13 +1,16 @@
 # encephagen
 
-**A miniature human brain — 16,000 spiking neurons, 80 brain regions, HCP connectome, controls a body.**
+**A miniature human newborn — 16,080 spiking neurons, 10 innate behaviors, 3D Humanoid body. Zero learning.**
 
 ```bash
-python newborn_demo.py            # Brain controls Walker2d body (2.1x baseline survival)
-python newborn_demo.py --render   # Visual rendering
+python newborn_full.py --video    # Full newborn: Humanoid body, all reflexes, spiking CPG
+python newborn.py --spiking-cpg --video  # Walker2d body, spiking CPG
 python demo.py                    # Interactive brain stimulation (no body)
-python interact.py                # Legacy interactive interface
 ```
+
+The newborn has: righting reflex, Moro reflex (arms extend/flex), startle, palmar grasp,
+ATNR/fencing, stepping (80-neuron spiking CPG), breathing rhythm, general movements,
+knee stabilization — all from innate structure, no learning.
 
 ## What This Brain Can Do
 
