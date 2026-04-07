@@ -429,18 +429,35 @@ class Newborn:
         y += 15
 
         # Spinal CPG
-        cv2.putText(panel, "SPINAL CPG (stepping)", (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 200, 255), 1)
-        y += 22
-        cpg_state = self.cpg.get_state()
-        for name in ['left_flex', 'left_ext', 'right_flex', 'right_ext']:
-            val = cpg_state[name]
-            bar_w = int(min(abs(val) * 100, 150))
-            color = (100, 200, 255) if val > 0 else (60, 60, 70)
-            cv2.putText(panel, name.replace('_', ' '), (15, y + 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
-            cv2.rectangle(panel, (130, y), (130 + max(bar_w, 1), y + 12), color, -1)
-            y += 18
+        if self.use_spiking_cpg:
+            cv2.putText(panel, "SPINAL CPG (80 spiking neurons)", (10, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 200, 255), 1)
+            y += 22
+            # Show spiking CPG motor neuron activity
+            for side, label in [('L', 'left'), ('R', 'right')]:
+                for mn_type in ['flex', 'ext']:
+                    idx = self.spiking_cpg.idx[f'{side}_{mn_type}_mn']
+                    v_mean = self.spiking_cpg_state['v'][idx].mean().item()
+                    val = v_mean / 8.0  # normalize to [0,1] roughly
+                    bar_w = int(min(abs(val) * 150, 150))
+                    color = (100, 200, 255) if val > 0.5 else (60, 60, 70)
+                    cv2.putText(panel, f"{label} {mn_type}", (15, y + 12),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
+                    cv2.rectangle(panel, (130, y), (130 + max(bar_w, 1), y + 12), color, -1)
+                    y += 18
+        else:
+            cv2.putText(panel, "SPINAL CPG (Matsuoka)", (10, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 200, 255), 1)
+            y += 22
+            cpg_state = self.cpg.get_state()
+            for name in ['left_flex', 'left_ext', 'right_flex', 'right_ext']:
+                val = cpg_state[name]
+                bar_w = int(min(abs(val) * 100, 150))
+                color = (100, 200, 255) if val > 0 else (60, 60, 70)
+                cv2.putText(panel, name.replace('_', ' '), (15, y + 12),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
+                cv2.rectangle(panel, (130, y), (130 + max(bar_w, 1), y + 12), color, -1)
+                y += 18
 
         y += 10
         cv2.line(panel, (10, y), (width - 10, y), (50, 50, 60), 1)
