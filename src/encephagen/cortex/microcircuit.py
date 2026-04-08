@@ -178,6 +178,7 @@ def build_between_region_connectivity(
     npr: int,
     global_coupling: float = 5.0,
     rng: np.random.Generator | None = None,
+    g_contra_ratio: float = 0.6,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build between-region connections following feedforward/feedback rules.
 
@@ -213,6 +214,25 @@ def build_between_region_connectivity(
     except FileNotFoundError:
         tau_m_regions = np.linspace(10, 30, n_regions)
 
+    # Hemisphere-specific coupling (2025 literature: improves FC-FC)
+    # Intra-hemispheric connections are stronger than inter-hemispheric
+    try:
+        tau_labels_loaded = True
+        import json
+        _tau_labels = json.load(open(
+            'src/encephagen/connectome/bundled/neurolib80_t1t2_labels.json'))
+    except (FileNotFoundError, Exception):
+        _tau_labels = [f'region_{i}' for i in range(n_regions)]
+        tau_labels_loaded = False
+
+    def same_hemisphere(src_r, dst_r):
+        if not tau_labels_loaded or src_r >= len(_tau_labels) or dst_r >= len(_tau_labels):
+            return True
+        s = _tau_labels[src_r]; d = _tau_labels[dst_r]
+        s_hemi = 'L' if '_L' in s else ('R' if '_R' in s else '?')
+        d_hemi = 'L' if '_L' in d else ('R' if '_R' in d else '?')
+        return s_hemi == d_hemi
+
     n_ff = 0
     n_fb = 0
 
@@ -234,11 +254,14 @@ def build_between_region_connectivity(
             # Lower tau_m (sensory) → higher tau_m (frontal) = feedforward
             is_feedforward = tau_m_regions[src] < tau_m_regions[dst]
 
+            # Hemisphere-specific scaling
+            hemi_scale = 1.0 if same_hemisphere(src, dst) else g_contra_ratio
+
             if is_feedforward:
                 # FEEDFORWARD: L2/3 of source → L4 of target (strong, driving)
                 src_start, src_end = cell_map.get((src, 'L23'), (0, 0))
                 dst_start, dst_end = cell_map.get((dst, 'L4'), (0, 0))
-                syn_weight = global_coupling * w_norm * 1.5  # strong
+                syn_weight = global_coupling * w_norm * 1.5 * hemi_scale
                 conn_prob = 0.03 * w_norm
                 n_ff += 1
             else:
@@ -248,7 +271,7 @@ def build_between_region_connectivity(
                 src_start = src_s5
                 src_end = src_e6 if src_e6 > 0 else src_e5
                 dst_start, dst_end = cell_map.get((dst, 'L23'), (0, 0))
-                syn_weight = global_coupling * w_norm * 0.5  # weak
+                syn_weight = global_coupling * w_norm * 0.5 * hemi_scale  # weak
                 conn_prob = 0.02 * w_norm
                 n_fb += 1
 
