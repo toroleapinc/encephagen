@@ -1,6 +1,6 @@
 # encephagen
 
-**A miniature human newborn — 16,080 spiking neurons, 10 innate behaviors, 3D Humanoid body. Zero learning.**
+**A complete miniature human brain — 17,530 spiking neurons, 10 brain structures, all biologically wired. Zero learning.**
 
 ```bash
 python newborn_full.py --video    # Full newborn: Humanoid body, all reflexes, spiking CPG
