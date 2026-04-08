@@ -1,0 +1,77 @@
+{
+  "innate": 261.8,
+  "days": [
+    {
+      "day": 1,
+      "awake_mean": 251.0,
+      "post_sleep_mean": 267.0,
+      "improvement": 1.0198624904507256,
+      "coherence": 0.156509344283463,
+      "consolidation_events": 2,
+      "elapsed_s": 1798.8275122642517
+    },
+    {
+      "day": 2,
+      "awake_mean": 247.8,
+      "post_sleep_mean": 239.0,
+      "improvement": 0.9129106187929716,
+      "coherence": 0.12137145142984665,
+      "consolidation_events": 3,
+      "elapsed_s": 3718.9884111881256
+    },
+    {
+      "day": 3,
+      "awake_mean": 237.6,
+      "post_sleep_mean": 240.8,
+      "improvement": 0.9197860962566845,
+      "coherence": 0.13838269935975858,
+      "consolidation_events": 1,
+      "elapsed_s": 5884.136482477188
+    },
+    {
+      "day": 4,
+      "awake_mean": 249.33333333333334,
+      "post_sleep_mean": 247.0,
+      "improvement": 0.9434682964094728,
+      "coherence": 0.14332055592668708,
+      "consolidation_events": 1,
+      "elapsed_s": 7883.144218206406
+    },
+    {
+      "day": 5,
+      "awake_mean": 236.33333333333334,
+      "post_sleep_mean": 236.0,
+      "improvement": 0.9014514896867838,
+      "coherence": 0.13971144463377974,
+      "consolidation_events": 2,
+      "elapsed_s": 10540.247658252716
+    },
+    {
+      "day": 6,
+      "awake_mean": 243.33333333333334,
+      "post_sleep_mean": 239.6,
+      "improvement": 0.9152024446142093,
+      "coherence": 0.1274183011754578,
+      "consolidation_events": 3,
+      "elapsed_s": 13173.136498689651
+    },
+    {
+      "day": 7,
+      "awake_mean": 248.93333333333334,
+      "post_sleep_mean": 251.8,
+      "improvement": 0.9618029029793735,
+      "coherence": 0.1356316870215072,
+      "consolidation_events": 1,
+      "elapsed_s": 14637.35931134224
+    },
+    {
+      "day": 8,
+      "awake_mean": 231.93333333333334,
+      "post_sleep_mean": 263.6,
+      "improvement": 1.0068754774637128,
+      "coherence": 0.1428629629414886,
+      "consolidation_events": 2,
+      "elapsed_s": 16002.00541806221
+    }
+  ]
+}
