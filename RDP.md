@@ -158,7 +158,7 @@ All of the above fits in 12GB:
 | Connectome advantage over random (0/33 experiments) | ❌ |
 | Stimulus propagation through cortex | ❌ (dMRI all-excitatory wall) |
 | Pure brain body control (brain = noise without calibration) | ❌ |
-| Learning from experience | ❌ (not attempted — pure 先天) |
+| Learning from experience | ✅ STARTED — 7 learning rules, 4 months simulated |
 
 ### Key scientific findings (from expert panel review):
 
@@ -170,6 +170,28 @@ All of the above fits in 12GB:
 
 ### The 先天 ceiling:
 The newborn simulation matches real newborn capability: reflexes, breathing, fidgeting, stepping. Everything beyond requires 后天 (learning).
+
+### 后天 Phase: STARTED
+
+7 distributed learning rules active simultaneously:
+- Cerebellum: supervised LTD (error → weaken Purkinje synapses)
+- Basal ganglia: dopamine RL (reward prediction error → D1/D2)
+- Hippocampus: Hebbian LTP (co-active CA3 → strengthen)
+- Amygdala: Pavlovian (threat → strengthen LA→CeA)
+- Brainstem: habituation (repeated stimulus → depression)
+- CPG: sensory adaptation (tilt → adjust drive)
+- Cortex: homeostatic (very slow rate adaptation)
+
+**4 months of development results:**
+- Motor control: flat (251 → 251 steps)
+- Amygdala: **+51% weight change** (learned fear of falling)
+- Thalamus: **-12%** (habituated to constant input)
+- Hippocampus: **+2.4%** (memory traces formed)
+- Dopamine dropped, arousal spiked, serotonin depleted
+
+The brain learns internally but motor improvement requires cortical takeover — the cortex (0% change) hasn't started controlling the body yet.
+
+**Innate baseline captured:** `snapshots/innate_baseline.json` — every synapse tracked.
 
 ### Outstanding experiments from expert review:
 1. **Peak SC-FC real vs null across G sweep** — Does the real connectome achieve higher MAXIMUM SC-FC than random at any G?
@@ -216,8 +238,12 @@ Start with noisy connectome, let STDP/e-prop refine it through experience. Compa
 | Full newborn on Humanoid body | **DONE** (1.2x baseline) |
 | Lateralized brain corrective output | **DONE** (97% of PD controller) |
 | Structural advantage over random | **NOT FOUND** (0/33) |
-| Cortical developmental takeover | NOT STARTED (后天 phase) |
-| Learning scaffold advantage | NOT STARTED (后天 phase) |
+| Complete brain (all 10 organs) | **DONE** (17,530 neurons, all wired) |
+| Integrated body demo | **DONE** (2.8x baseline with all structures) |
+| Innate baseline captured | **DONE** (873K synapses, all states saved) |
+| Distributed learning (7 rules) | **DONE** (amygdala +51%, thalamus -12%) |
+| Motor improvement from learning | NOT YET (cortex hasn't taken over) |
+| Cortical developmental takeover | NOT YET (needs corticospinal myelination sim) |
 
 ### The dMRI wall
 dMRI tractography provides excitatory-only, undirected macro-scale routing. Without inhibitory long-range connections (needs neurotransmitter identity), stimulus propagation and differentiated computation are blocked. This is a DATA limitation, not a SOFTWARE limitation.
