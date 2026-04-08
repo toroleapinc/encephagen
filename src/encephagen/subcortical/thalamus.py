@@ -154,9 +154,16 @@ class Thalamus:
             if 'somatosensory' in sensory_input:
                 ext[self.idx['vpl']] = sensory_input['somatosensory'] * 15.0
 
-        # Cortical feedback → relay + TRN (L6 modulates the gate)
+        # Cortical L5 output → higher-order thalamus (TRANSTHALAMIC RELAY)
+        # This is how cortex talks to cortex: L5 → HO thalamus → target L4
         if cortical_feedback is not None:
-            ext += cortical_feedback
+            # cortical_feedback is a tensor [n_thalamus] with L5 output strength
+            # L5 drives the HO (higher-order) relay neurons
+            ext[self.idx['ho']] += cortical_feedback[self.idx['ho']]
+            # L6 modulates first-order relay + TRN (gate control)
+            for relay in ['lgn', 'mgn', 'vpl', 'md']:
+                ext[self.idx[relay]] += cortical_feedback[self.idx[relay]] * 0.5
+            ext[self.idx['trn']] += cortical_feedback[self.idx['trn']] * 0.3
 
         # Noise
         noise = torch.randn(self.n_total, device=self.device) * 0.5
@@ -186,6 +193,32 @@ class Thalamus:
 
         return state, relay_output, spikes
 
+    def receive_cortex_l5(self, cortex_spikes, cell_map, n_regions, npr, tau_labels):
+        """Collect cortex L5 output and convert to thalamic HO input.
+
+        Cortex L5 neurons project to higher-order thalamus.
+        The signal strength depends on which cortical region is active.
+
+        Returns: tensor [n_thalamus] of input current to HO relay.
+        """
+        feedback = torch.zeros(self.n_total, device=self.device)
+
+        # Sum L5 activity across all cortical regions
+        total_l5 = 0.0
+        active_regions = []
+        for r in range(n_regions):
+            l5_start, l5_end = cell_map.get((r, 'L5'), (0, 0))
+            if l5_end > l5_start:
+                l5_rate = cortex_spikes[l5_start:l5_end].float().mean().item()
+                if l5_rate > 0.001:
+                    total_l5 += l5_rate
+                    active_regions.append(r)
+
+        # Drive HO thalamus proportional to total L5 output
+        feedback[self.idx['ho']] = total_l5 * 300.0  # amplified
+
+        return feedback
+
     def get_cortex_input(self, relay_output, cell_map, n_regions, npr, tau_labels):
         """Convert relay output to cortex L4 input current.
 
@@ -204,7 +237,9 @@ class Thalamus:
             'mgn': ['Heschl', 'Temporal_Sup'],
             'vpl': ['Postcentral', 'Paracentral'],
             'md': ['Frontal_Sup', 'Frontal_Mid'],
-            'ho': ['Parietal_Sup', 'Precuneus', 'Angular'],
+            'ho': ['Parietal_Sup', 'Precuneus', 'Angular', 'SupraMarginal',
+                   'Temporal_Mid', 'Temporal_Inf', 'Fusiform',
+                   'Frontal_Inf', 'Cingulate_Mid', 'Insula'],
         }
 
         for relay_name, cortex_patterns in routing.items():

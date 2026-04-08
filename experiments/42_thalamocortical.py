@@ -74,21 +74,43 @@ def main():
     i_syn = torch.zeros(n_total, device=device)
     dt = 0.1; v_thr = 8.0
 
-    # Warmup (3000 steps)
-    print("  Warming up...", flush=True)
-    for _ in range(3000):
-        thal_state, relay, _ = thalamus.step(thal_state)
+    # Full thalamocortical loop step function
+    def tc_step(sensory=None):
+        """One step of the full thalamocortical loop."""
+        nonlocal v, refrac, i_syn, thal_state
+
+        # 1. Cortex L5 → thalamus HO (transthalamic relay)
+        cortex_to_thal = thalamus.receive_cortex_l5(
+            spikes if 'spikes' in dir() else torch.zeros(n_total, device=device),
+            cell_map, n_regions, npr, tau_labels)
+
+        # 2. Thalamus step (sensory input + cortical feedback)
+        thal_state, relay, thal_spikes = thalamus.step(
+            thal_state, sensory_input=sensory, cortical_feedback=cortex_to_thal)
+
+        # 3. Thalamus → cortex L4
         thal_input = thalamus.get_cortex_input(relay, cell_map, n_regions, npr, tau_labels)
+
+        # 4. Cortex step
         noise = torch.randn(n_total, device=device) * 0.5
         i_total = i_syn + tonic + noise + thal_input
         active = refrac <= 0; dv = (-v + i_total) / tau_m_d
-        v = v + dt * dv * active.float()
-        spikes = (v >= v_thr) & active
-        v = torch.where(spikes, torch.zeros_like(v), v)
-        refrac = torch.where(spikes, torch.full_like(refrac, 1.5), refrac)
-        refrac = torch.clamp(refrac - dt, min=0)
-        syn_input = torch.sparse.mm(W_t.t(), spikes.float().unsqueeze(1)).squeeze(1)
-        i_syn = i_syn * np.exp(-dt / 5.0) + syn_input
+        v_new = v + dt * dv * active.float()
+        spikes_new = (v_new >= v_thr) & active
+        v_new = torch.where(spikes_new, torch.zeros_like(v_new), v_new)
+        refrac_new = torch.where(spikes_new, torch.full_like(refrac, 1.5), refrac)
+        refrac_new = torch.clamp(refrac_new - dt, min=0)
+        syn_input = torch.sparse.mm(W_t.t(), spikes_new.float().unsqueeze(1)).squeeze(1)
+        i_syn_new = i_syn * np.exp(-dt / 5.0) + syn_input
+
+        v[:] = v_new; refrac[:] = refrac_new; i_syn[:] = i_syn_new
+        return spikes_new, relay
+
+    # Warmup with full thalamocortical loop
+    print("  Warming up with thalamocortical loop...", flush=True)
+    spikes = torch.zeros(n_total, device=device, dtype=torch.bool)
+    for _ in range(3000):
+        spikes, _ = tc_step()
 
     # Regions of interest
     vis_regions = [i for i, l in enumerate(tau_labels) if 'Calcarine' in l or 'Cuneus' in l]
@@ -97,29 +119,18 @@ def main():
     front_regions = [i for i, l in enumerate(tau_labels) if 'Frontal_Sup' in l]
     parietal_regions = [i for i, l in enumerate(tau_labels) if 'Parietal_Sup' in l]
 
-    def measure_rates(regions, steps=2000):
-        """Measure firing rates for given regions."""
-        nonlocal v, refrac, i_syn, thal_state
+    def measure_rates(regions, steps=2000, sensory=None):
+        """Measure firing rates using full thalamocortical loop."""
+        nonlocal spikes
         total = 0
         for _ in range(steps):
-            thal_state, relay, _ = thalamus.step(thal_state)
-            thal_input = thalamus.get_cortex_input(relay, cell_map, n_regions, npr, tau_labels)
-            noise = torch.randn(n_total, device=device) * 0.5
-            i_total = i_syn + tonic + noise + thal_input
-            active = refrac <= 0; dv = (-v + i_total) / tau_m_d
-            v = v + dt * dv * active.float()
-            spikes = (v >= v_thr) & active
-            v = torch.where(spikes, torch.zeros_like(v), v)
-            refrac = torch.where(spikes, torch.full_like(refrac, 1.5), refrac)
-            refrac = torch.clamp(refrac - dt, min=0)
-            syn_input = torch.sparse.mm(W_t.t(), spikes.float().unsqueeze(1)).squeeze(1)
-            i_syn = i_syn * np.exp(-dt / 5.0) + syn_input
+            spikes, _ = tc_step(sensory=sensory)
             for r in regions:
                 total += spikes[r*npr:(r+1)*npr].sum().item()
         return total / (len(regions) * npr * steps)
 
-    # === TEST 1: Baseline (no sensory input) ===
-    print(f"\n  TEST 1: Baseline (thalamus relay, no external stimulus)")
+    # === TEST 1: Baseline (no sensory input, with transthalamic loop) ===
+    print(f"\n  TEST 1: Baseline (thalamocortical loop, no external stimulus)")
     bl = {}
     for name, regions in [('visual', vis_regions), ('auditory', aud_regions),
                             ('somatosensory', soma_regions), ('frontal', front_regions),
@@ -129,33 +140,15 @@ def main():
     for name, rate in bl.items():
         print(f"  {name:<18} {rate:>10.5f}")
 
-    # === TEST 2: Visual stimulus through thalamus ===
-    print(f"\n  TEST 2: Visual stimulus → LGN → visual cortex L4")
-    # Set thalamic visual input
+    # === TEST 2: Visual stimulus through FULL thalamocortical loop ===
+    print(f"\n  TEST 2: Visual → LGN → V1 L4 → V1 L5 → HO thalamus → higher cortex L4")
     thalamus_sensory = {'visual': 0.8, 'auditory': 0.0, 'somatosensory': 0.0}
 
     stim = {}
     for name, regions in [('visual', vis_regions), ('auditory', aud_regions),
                             ('somatosensory', soma_regions), ('frontal', front_regions),
                             ('parietal', parietal_regions)]:
-        # Measure with sensory input going through thalamus
-        total = 0
-        for _ in range(3000):
-            thal_state, relay, _ = thalamus.step(thal_state, sensory_input=thalamus_sensory)
-            thal_input = thalamus.get_cortex_input(relay, cell_map, n_regions, npr, tau_labels)
-            noise = torch.randn(n_total, device=device) * 0.5
-            i_total = i_syn + tonic + noise + thal_input
-            active = refrac <= 0; dv = (-v + i_total) / tau_m_d
-            v = v + dt * dv * active.float()
-            spikes = (v >= v_thr) & active
-            v = torch.where(spikes, torch.zeros_like(v), v)
-            refrac = torch.where(spikes, torch.full_like(refrac, 1.5), refrac)
-            refrac = torch.clamp(refrac - dt, min=0)
-            syn_input = torch.sparse.mm(W_t.t(), spikes.float().unsqueeze(1)).squeeze(1)
-            i_syn = i_syn * np.exp(-dt / 5.0) + syn_input
-            for r in regions:
-                total += spikes[r*npr:(r+1)*npr].sum().item()
-        stim[name] = total / (len(regions) * npr * 3000)
+        stim[name] = measure_rates(regions, steps=3000, sensory=thalamus_sensory)
 
     print(f"  {'Region':<18} {'Baseline':>10} {'Stimulus':>10} {'Change':>10}")
     print(f"  {'─'*50}")
