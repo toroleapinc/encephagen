@@ -1,0 +1,58 @@
+{
+  "name": "innate_baseline",
+  "walker2d_survival": {
+    "runs": [
+      216,
+      270,
+      224,
+      219,
+      253
+    ],
+    "mean": 236.4,
+    "baseline": 119,
+    "improvement": 1.9865546218487395
+  },
+  "stimulus_responses": {
+    "visual": {
+      "fear": 0.0,
+      "DA": 0.05634628835096393,
+      "NE": 0.13342939626135128,
+      "arousal": 1.0
+    },
+    "threat": {
+      "fear": 0.0,
+      "DA": 0.03416720287710156,
+      "NE": 0.14344096908401635,
+      "arousal": 1.0
+    },
+    "reward": {
+      "fear": 0.0,
+      "DA": 0.133590689066271,
+      "NE": 0.13158047562950517,
+      "arousal": 1.0
+    },
+    "none": {
+      "fear": 0.0,
+      "DA": 0.08100658107928393,
+      "NE": 0.15044033632079348,
+      "arousal": 1.0
+    }
+  },
+  "capabilities": {
+    "righting_reflex": true,
+    "stepping_cpg": true,
+    "moro_reflex": true,
+    "startle_reflex": true,
+    "palmar_grasp": true,
+    "atnr": true,
+    "breathing": true,
+    "general_movements": true,
+    "action_selection": true,
+    "visual_orienting": false,
+    "fear_response": true,
+    "memory_formation": false,
+    "motor_coordination": false,
+    "voluntary_movement": false,
+    "learning": false
+  }
+}
