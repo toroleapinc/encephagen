@@ -1,0 +1,61 @@
+{
+  "innate_baseline": 251.2,
+  "months": [
+    {
+      "month": 1,
+      "mean_survival": 243.9,
+      "std_survival": 29.627520989782454,
+      "improvement_vs_innate": 0.9709394904458599,
+      "mean_reward": 279.1830059303743,
+      "learning_stats": {
+        "total_steps": 6134,
+        "plasticity_events": 613,
+        "bg_dopamine": 0.8355046455566464,
+        "amygdala_fear": 0.0,
+        "habituation_active": true
+      }
+    },
+    {
+      "month": 2,
+      "mean_survival": 241.1,
+      "std_survival": 26.79720134640929,
+      "improvement_vs_innate": 0.9597929936305732,
+      "mean_reward": 280.520946465471,
+      "learning_stats": {
+        "total_steps": 10956,
+        "plasticity_events": 1095,
+        "bg_dopamine": 1.0132202837600255,
+        "amygdala_fear": 0.0,
+        "habituation_active": true
+      }
+    },
+    {
+      "month": 3,
+      "mean_survival": 237.4,
+      "std_survival": 23.63556642012203,
+      "improvement_vs_innate": 0.945063694267516,
+      "mean_reward": 225.97446928419305,
+      "learning_stats": {
+        "total_steps": 15704,
+        "plasticity_events": 1570,
+        "bg_dopamine": 0.8362120663509933,
+        "amygdala_fear": 0.0,
+        "habituation_active": true
+      }
+    },
+    {
+      "month": 4,
+      "mean_survival": 251.3,
+      "std_survival": 35.679265687511,
+      "improvement_vs_innate": 1.0003980891719746,
+      "mean_reward": 264.59253676787995,
+      "learning_stats": {
+        "total_steps": 20730,
+        "plasticity_events": 2073,
+        "bg_dopamine": 1.0120044789161402,
+        "amygdala_fear": 0.0,
+        "habituation_active": true
+      }
+    }
+  ]
+}
