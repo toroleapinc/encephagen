@@ -95,9 +95,9 @@ def main():
     print(f"\n  Innate baseline: {baseline_steps} mean={innate_mean:.0f}")
 
     # Development: days with awake + sleep cycles
-    N_DAYS = 8
-    EPISODES_PER_DAY = 15
-    SLEEP_STEPS = 5000
+    N_DAYS = 30
+    EPISODES_PER_DAY = 10
+    SLEEP_STEPS = 3000
 
     dev_log = {
         'innate': float(innate_mean),
